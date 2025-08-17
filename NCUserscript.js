@@ -1,11 +1,10 @@
-
 // ==UserScript==
-// @name         NovaCore
-// @namespace    http://tampermonkey.net/
-// @version      1.12
-// @description  Novacore not done yet
-// @author       (Cant reveal who im)
-// @match        *://*/*
+// @name         NovaCore V2
+// @namespace    http://github.com/ModuleMaster64/
+// @version      2.01-dev
+// @description  Novacore V2 but improved by MM64!
+// @author       (Cant reveal who im), MM64
+// @match        https://miniblox.io/
 // @grant        none
 // ==/UserScript==
 
