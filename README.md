@@ -57,3 +57,19 @@ Contributions are welcome. Please:
 - Add examples and screenshots demonstrating module behavior.
 
 Thank you for using NovaCore — contributions and feedback are much appreciated!
+
+[Screen recording 2025-10-25 14.59.40.webm](https://github.com/user-attachments/assets/820584c7-74bc-4007-b741-3287bdffb8a6)
+
+## Step by Step (if video is low quality)
+Step 1: search miniblox on github
+Step 2: go to recently updated 
+Step 3: click on NovaCoreForMiniblox
+Step 4: go to `NCUserscript.js`
+Step 5: Copy this
+Step 6: Make sure tampermonkey is installed
+Step 7: Paste this into tampermonkey 
+Step 8: You should see this save
+Step 9: Reload OR open miniblox.io
+Step 10: you should see a animation screen to say it has been installed 
+Step 11: press \\ to access the GUI
+Step 12: Enjoy!
