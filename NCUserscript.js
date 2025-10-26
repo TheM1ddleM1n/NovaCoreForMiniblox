@@ -439,32 +439,155 @@
     }
 
     @keyframes slideDownInTop {
-        from {opacity: 0; transform: translate(-50%, -70px);}
-        to {opacity: 1; transform: translate(-50%, 0);}
+        0% {
+            opacity: 0;
+            transform: translate(-50%, -70px);
+        }
+        60% {
+            opacity: 1;
+            transform: translate(-50%, 5px);
+        }
+        100% {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
     }
+
     @keyframes slideUpOutTop {
-        from {opacity: 1; transform: translate(-50%, 0);}
-        to {opacity: 0; transform: translate(-50%, -70px);}
+        0% {
+            opacity: 1;
+            transform: translate(-50%, 0);
+        }
+        100% {
+            opacity: 0;
+            transform: translate(-50%, -100px) scale(0.9);
+        }
     }
+
     @keyframes checkPopIn {
-        0% {opacity: 0; transform: scale(0);}
-        70% {opacity: 1; transform: scale(1.3);}
-        100% {opacity: 1; transform: scale(1);}
+        0% {
+            opacity: 0;
+            transform: scale(0) rotate(-45deg);
+        }
+        50% {
+            opacity: 1;
+            transform: scale(1.4) rotate(10deg);
+        }
+        75% {
+            transform: scale(0.9) rotate(-5deg);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1) rotate(0deg);
+        }
     }
+
     @keyframes fadeScaleIn {
-        from {opacity: 0; transform: scale(0.75);}
-        to {opacity: 1; transform: scale(1);}
+        0% {
+            opacity: 0;
+            transform: scale(0.5);
+        }
+        50% {
+            opacity: 0.8;
+            transform: scale(1.05);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1);
+        }
     }
+
     @keyframes strokeDashoffsetAnim {
-        0% {stroke-dashoffset: 1000;}
-        100% {stroke-dashoffset: 0;}
+        0% {
+            stroke-dashoffset: 1000;
+            opacity: 0;
+        }
+        20% {
+            opacity: 1;
+        }
+        100% {
+            stroke-dashoffset: 0;
+            opacity: 1;
+        }
     }
+
     @keyframes checkmarkFadeScale {
-        0% {opacity: 0; transform: scale(0);}
-        100% {opacity: 1; transform: scale(1);}
+        0% {
+            opacity: 0;
+            transform: scale(0) rotate(-180deg);
+        }
+        60% {
+            opacity: 1;
+            transform: scale(1.3) rotate(10deg);
+        }
+        80% {
+            transform: scale(0.9) rotate(-5deg);
+        }
+        100% {
+            opacity: 1;
+            transform: scale(1) rotate(0deg);
+        }
     }
+
     @keyframes fadeOut {
-        to {opacity: 0;}
+        0% {
+            opacity: 1;
+            transform: scale(1);
+        }
+        100% {
+            opacity: 0;
+            transform: scale(0.95);
+        }
+    }
+
+    @keyframes glowPulse {
+        0%, 100% {
+            text-shadow:
+                0 0 8px var(--nova-shadow),
+                0 0 20px var(--nova-shadow),
+                0 0 30px var(--nova-shadow);
+        }
+        50% {
+            text-shadow:
+                0 0 12px var(--nova-shadow),
+                0 0 30px var(--nova-shadow),
+                0 0 50px var(--nova-shadow),
+                0 0 70px var(--nova-shadow);
+        }
+    }
+
+    @keyframes counterSlideIn {
+        from {
+            opacity: 0;
+            transform: translateX(-30px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    @keyframes menuItemHover {
+        0% {
+            transform: translateY(0);
+        }
+        50% {
+            transform: translateY(-4px);
+        }
+        100% {
+            transform: translateY(-2px);
+        }
+    }
+
+    @keyframes ripple {
+        0% {
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 1;
+        }
+        100% {
+            transform: translate(-50%, -50%) scale(4);
+            opacity: 0;
+        }
     }
 
     #nova-intro {
@@ -573,6 +696,7 @@
         white-space: nowrap;
         opacity: 0;
         transition: opacity 0.5s ease, color 0.3s ease, text-shadow 0.3s ease;
+        animation: glowPulse 3s ease-in-out infinite;
     }
 
     #nova-persistent-header.visible {
@@ -647,7 +771,7 @@
         margin-bottom: 4px;
         border-radius: 10px;
         cursor: pointer;
-        transition: all 0.3s ease;
+        transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
         user-select: none;
         text-align: center;
         position: relative;
@@ -667,16 +791,36 @@
         transition: width 0.6s ease, height 0.6s ease;
     }
 
+    .nova-menu-btn::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 0;
+        height: 0;
+        border-radius: 50%;
+        background: rgba(var(--nova-primary-rgb), 0.5);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+    }
+
     .nova-menu-btn:active::before {
         width: 300px;
         height: 300px;
     }
 
+    .nova-menu-btn:active::after {
+        animation: ripple 0.6s ease-out;
+    }
+
     .nova-menu-btn:hover {
         background: var(--nova-primary);
         color: #000;
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(var(--nova-primary-rgb), 0.4);
+        transform: translateY(-2px) scale(1.02);
+        box-shadow:
+            0 4px 12px rgba(var(--nova-primary-rgb), 0.4),
+            0 8px 24px rgba(var(--nova-primary-rgb), 0.2);
+        animation: menuItemHover 0.3s ease forwards;
     }
 
     #nova-hint-text {
@@ -717,14 +861,27 @@
         width: max-content;
         max-width: 160px;
         text-align: center;
-        transition: opacity 0.3s ease, transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+        transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+                    background 0.3s ease, box-shadow 0.3s ease;
         will-change: transform;
+        animation: counterSlideIn 0.5s ease-out;
     }
 
     .counter.dragging {
         cursor: grabbing;
         opacity: 0.85;
         user-select: none;
+        transform: scale(1.05);
+        box-shadow:
+            0 0 16px rgba(var(--nova-primary-rgb), 0.9),
+            inset 0 0 12px rgba(var(--nova-primary-rgb), 0.5);
+    }
+
+    .counter:hover:not(.dragging) {
+        transform: scale(1.02);
+        box-shadow:
+            0 0 12px rgba(var(--nova-primary-rgb), 0.85),
+            inset 0 0 10px rgba(var(--nova-primary-rgb), 0.4);
     }
 
     #real-time-counter {
