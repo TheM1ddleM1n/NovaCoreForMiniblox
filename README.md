@@ -19,7 +19,7 @@ This repository contains improvements, quality-of-life enhancements, and new fea
 3. Configure the script (see Configuration below) then enable it in the Tampermonkey dashboard.
 
 Userscript header (example)
-Make sure the actual script contains an appropriate metadata block. Example:
+Make sure the actual script contains an appropriate metadata block. An example:
 ```js
 // ==UserScript==
 // @name         NovaCore V2 Enhanced
@@ -33,8 +33,8 @@ Make sure the actual script contains an appropriate metadata block. Example:
 ```
 
 ## Usage
-- Install the userscript in Tampermonkey and visit the target site (see @match).
-- Open the Tampermonkey dashboard to edit configuration or enable/disable the script.
+- Install the userscript in Tampermonkey and visit the target site which is Miniblox.io (see @match).
+- Open the Tampermonkey dashboard to edit configuration or to enable/disable the script.
 
 ## Contributing
 Contributions are welcome. Please:
@@ -51,10 +51,6 @@ Contributions are welcome. Please:
 ## Contact & Support
 - Open an issue on this repository for bugs, feature requests, or help: https://github.com/TheM1ddleM1n/NovaCoreForMiniblox/issues
 - Maintainer: https://github.com/TheM1ddleM1n
-
-## Next steps for this repository
-- Add a CONTRIBUTING.md and LICENSE file (MIT is a good default).
-- Add examples and screenshots demonstrating module behavior.
 
 Thank you for using NovaCore — contributions and feedback are much appreciated!
 
