@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         NovaCore V2.6 Enhanced
+// @name         NovaCore V2.7 Enhanced!
 // @namespace    http://github.com/TheM1ddleM1n/
-// @version      2.6
-// @description  NovaCore V2 with improved performance, memory management, code quality, themes, github updater!
+// @version      2.7
+// @description  NovaCore V2 fr fr!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
 // @grant        none
@@ -81,7 +81,7 @@
     const DEFAULT_MENU_KEY = '\\';
     const SESSION_START_KEY = 'novacore_session_start';
     const SESSION_ID_KEY = 'novacore_session_id';
-    const SCRIPT_VERSION = '2.6';
+    const SCRIPT_VERSION = '2.7';
     const GITHUB_REPO = 'TheM1ddleM1n/NovaCoreForMiniblox';
     const LAST_UPDATE_CHECK_KEY = 'novacore_last_update_check';
     const UPDATE_CHECK_INTERVAL = 3600000; // 1 hour in milliseconds
@@ -217,11 +217,11 @@
         set(target, prop, value) {
             const oldValue = target[prop];
             target[prop] = value;
-
+            
             if ((prop.includes('Shown') || prop === 'currentTheme') && oldValue !== value) {
                 debouncedSave();
             }
-
+            
             return true;
         }
     });
@@ -229,13 +229,13 @@
     // ===== THEME SYSTEM =====
     function applyTheme(themeName) {
         const theme = THEMES[themeName] || THEMES.cyan;
-
+        
         document.documentElement.style.setProperty('--nova-primary', theme.primary);
         document.documentElement.style.setProperty('--nova-primary-rgb', theme.primaryRgb);
         document.documentElement.style.setProperty('--nova-shadow', theme.shadow);
-
+        
         state.currentTheme = themeName;
-
+        
         if (cachedElements.hint) {
             cachedElements.hint.style.color = theme.primary;
             cachedElements.hint.style.textShadow = `
@@ -244,7 +244,7 @@
                 0 0 14px ${theme.shadow}
             `;
         }
-
+        
         console.log(`[NovaCore] Applied theme: ${theme.name}`);
     }
 
@@ -252,11 +252,11 @@
     function compareVersions(v1, v2) {
         const parts1 = v1.split('.').map(Number);
         const parts2 = v2.split('.').map(Number);
-
+        
         for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
             const part1 = parts1[i] || 0;
             const part2 = parts2[i] || 0;
-
+            
             if (part1 > part2) return 1;
             if (part1 < part2) return -1;
         }
@@ -267,7 +267,7 @@
         return safeExecute(() => {
             const notification = document.createElement('div');
             notification.className = 'update-notification';
-
+            
             notification.innerHTML = `
                 <div class="update-notification-header">
                     🎉 Update Available!
@@ -282,24 +282,44 @@
                     <button class="update-notification-btn dismiss" id="dismiss-btn">Later</button>
                 </div>
             `;
-
+            
             document.body.appendChild(notification);
-
-            document.getElementById('update-btn').addEventListener('click', () => {
-                window.open(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, '_blank');
-                notification.remove();
+            
+            document.getElementById('update-btn').addEventListener('click', async () => {
+                try {
+                    const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`);
+                    const scriptContent = await response.text();
+                    
+                    // Create a blob URL that Tampermonkey will intercept
+                    const blob = new Blob([scriptContent], { type: 'text/javascript' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    // Create a temporary link and click it
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'NCUserscript.user.js'; // .user.js extension triggers Tampermonkey
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    notification.remove();
+                } catch (error) {
+                    console.error('[NovaCore] Update failed:', error);
+                    alert('Update failed. Please try updating manually from GitHub.');
+                }
             });
-
+            
             document.getElementById('dismiss-btn').addEventListener('click', () => {
                 notification.remove();
             });
-
+            
             setTimeout(() => {
                 if (notification.parentElement) {
                     notification.remove();
                 }
             }, 30000);
-
+            
         }, null, 'showUpdateNotification');
     }
 
@@ -307,39 +327,39 @@
         return safeExecute(async () => {
             const lastCheck = localStorage.getItem(LAST_UPDATE_CHECK_KEY);
             const now = Date.now();
-
+            
             if (!manual && lastCheck && (now - parseInt(lastCheck)) < UPDATE_CHECK_INTERVAL) {
                 console.log('[NovaCore] Skipping update check (checked recently)');
                 return;
             }
-
+            
             console.log('[NovaCore] Checking for updates...');
-
+            
             try {
                 const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, {
                     cache: 'no-cache'
                 });
-
+                
                 if (!response.ok) {
                     throw new Error('Failed to fetch update');
                 }
-
+                
                 const scriptContent = await response.text();
                 const versionMatch = scriptContent.match(/@version\s+(\d+\.\d+)/);
-
+                
                 if (versionMatch) {
                     const latestVersion = versionMatch[1];
                     state.latestVersion = latestVersion;
-
+                    
                     localStorage.setItem(LAST_UPDATE_CHECK_KEY, now.toString());
-
+                    
                     const comparison = compareVersions(latestVersion, SCRIPT_VERSION);
-
+                    
                     if (comparison > 0) {
                         console.log(`[NovaCore] Update available: v${latestVersion}`);
                         state.updateAvailable = true;
                         showUpdateNotification(latestVersion);
-
+                        
                         // Update the GUI button
                         if (cachedElements.checkUpdateBtn) {
                             cachedElements.checkUpdateBtn.textContent = '🎉 Update Now!';
@@ -348,7 +368,7 @@
                                 window.open(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, '_blank');
                             };
                         }
-
+                        
                         if (manual && cachedElements.updateStatus) {
                             cachedElements.updateStatus.textContent = `✨ v${latestVersion} available!`;
                             cachedElements.updateStatus.style.color = '#2ecc71';
@@ -1123,12 +1143,12 @@
                 state.cleanupFunctions.fps();
                 state.cleanupFunctions.fps = null;
             }
-
+            
             if (state.counters.fps) {
                 state.counters.fps.remove();
                 state.counters.fps = null;
             }
-
+            
             if (state.rafId) {
                 cancelAnimationFrame(state.rafId);
                 state.rafId = null;
@@ -1165,12 +1185,12 @@
 
             const dragCleanup = setupDragging(counter, 'cps');
             window.addEventListener('mousedown', cpsClickListener);
-
+            
             state.cleanupFunctions.cps = () => {
                 dragCleanup();
                 window.removeEventListener('mousedown', cpsClickListener);
             };
-
+            
             return counter;
         }, null, 'createCPSCounter');
     }
@@ -1201,12 +1221,12 @@
                 state.cleanupFunctions.cps();
                 state.cleanupFunctions.cps = null;
             }
-
+            
             if (state.counters.cps) {
                 state.counters.cps.remove();
                 state.counters.cps = null;
             }
-
+            
             if (state.intervals.cps) {
                 clearInterval(state.intervals.cps);
                 state.intervals.cps = null;
@@ -1282,24 +1302,24 @@
             // Generate a unique session ID for this page load
             const currentSessionId = Date.now() + '_' + Math.random();
             const savedSessionId = sessionStorage.getItem(SESSION_ID_KEY);
-
+            
             // If session IDs don't match, this is a new session (reload/new tab)
             if (!savedSessionId || savedSessionId !== currentSessionId) {
                 // Store new session ID in sessionStorage (clears on tab close/reload)
                 sessionStorage.setItem(SESSION_ID_KEY, currentSessionId);
-
+                
                 // Reset the timer
                 const now = Date.now();
                 localStorage.setItem(SESSION_START_KEY, now.toString());
                 return now;
             }
-
+            
             // Same session, return saved time
             const saved = localStorage.getItem(SESSION_START_KEY);
             if (saved) {
                 return parseInt(saved, 10);
             }
-
+            
             // Fallback: create new timer
             const now = Date.now();
             localStorage.setItem(SESSION_START_KEY, now.toString());
@@ -1392,12 +1412,12 @@
                 state.cleanupFunctions.sessionTimer();
                 state.cleanupFunctions.sessionTimer = null;
             }
-
+            
             if (state.counters.sessionTimer) {
                 state.counters.sessionTimer.remove();
                 state.counters.sessionTimer = null;
             }
-
+            
             if (state.intervals.sessionTimer) {
                 clearInterval(state.intervals.sessionTimer);
                 state.intervals.sessionTimer = null;
@@ -1516,7 +1536,7 @@
                 const themeBtn = document.createElement('button');
                 themeBtn.className = `theme-btn ${themeKey}`;
                 themeBtn.textContent = theme.name.replace(' (Default)', '');
-
+                
                 if (state.currentTheme === themeKey) {
                     themeBtn.classList.add('active');
                 }
@@ -1747,24 +1767,24 @@
     function globalCleanup() {
         safeExecute(() => {
             console.log('[NovaCore] Cleaning up resources...');
-
+            
             stopFPSCounter();
             stopCPSCounter();
             stopRealTimeCounter();
             stopSessionTimer();
-
+            
             Object.values(state.intervals).forEach(interval => {
                 if (interval) clearInterval(interval);
             });
-
+            
             if (state.rafId) {
                 cancelAnimationFrame(state.rafId);
             }
-
+            
             Object.values(state.cleanupFunctions).forEach(cleanup => {
                 if (cleanup) cleanup();
             });
-
+            
             console.log('[NovaCore] Cleanup complete');
         }, null, 'globalCleanup');
     }
@@ -1775,7 +1795,7 @@
     function init() {
         safeExecute(() => {
             console.log(`[NovaCore] Initializing version ${SCRIPT_VERSION}...`);
-
+            
             const intro = createIntro();
             const header = createPersistentHeader();
             const hint = createHintText();
@@ -1797,7 +1817,7 @@
 
                     restoreSavedState();
                     console.log('[NovaCore] Initialization complete');
-
+                    
                     // Check for updates after initialization
                     setTimeout(() => checkForUpdates(false), 2000);
                 }, TIMING.INTRO_FADE_OUT);
