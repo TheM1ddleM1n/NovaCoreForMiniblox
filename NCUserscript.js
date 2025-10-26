@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         NovaCore V2.7 Enhanced!
+// @name         NovaCore V2.7 Enhanced
 // @namespace    http://github.com/TheM1ddleM1n/
 // @version      2.7
-// @description  NovaCore V2 fr fr!
+// @description  NovaCore V2 with improved performance, memory management, code quality, and themes!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
 // @grant        none
@@ -92,25 +92,29 @@
         cpsShown: false,
         realTimeShown: false,
         sessionTimerShown: false,
+        antiAfkEnabled: false,
         menuKey: DEFAULT_MENU_KEY,
         currentTheme: 'cyan',
         counters: {
             fps: null,
             cps: null,
             realTime: null,
-            sessionTimer: null
+            sessionTimer: null,
+            antiAfk: null
         },
         intervals: {
             fps: null,
             cps: null,
             realTime: null,
-            sessionTimer: null
+            sessionTimer: null,
+            antiAfk: null
         },
         drag: {
             fps: { active: false, offsetX: 0, offsetY: 0 },
             cps: { active: false, offsetX: 0, offsetY: 0 },
             realTime: { active: false, offsetX: 0, offsetY: 0 },
-            sessionTimer: { active: false, offsetX: 0, offsetY: 0 }
+            sessionTimer: { active: false, offsetX: 0, offsetY: 0 },
+            antiAfk: { active: false, offsetX: 0, offsetY: 0 }
         },
         cpsClicks: [],
         rafId: null,
@@ -122,7 +126,8 @@
             sessionTimer: null
         },
         updateAvailable: false,
-        latestVersion: null
+        latestVersion: null,
+        antiAfkCountdown: 5
     };
 
     const cachedElements = {};
@@ -145,6 +150,7 @@
                 cpsShown: stateData.cpsShown,
                 realTimeShown: stateData.realTimeShown,
                 sessionTimerShown: stateData.sessionTimerShown,
+                antiAfkEnabled: stateData.antiAfkEnabled,
                 menuKey: stateData.menuKey,
                 currentTheme: stateData.currentTheme,
                 positions: {
@@ -163,6 +169,10 @@
                     sessionTimer: stateData.counters.sessionTimer ? {
                         left: stateData.counters.sessionTimer.style.left,
                         top: stateData.counters.sessionTimer.style.top
+                    } : null,
+                    antiAfk: stateData.counters.antiAfk ? {
+                        left: stateData.counters.antiAfk.style.left,
+                        top: stateData.counters.antiAfk.style.top
                     } : null
                 }
             };
@@ -217,11 +227,11 @@
         set(target, prop, value) {
             const oldValue = target[prop];
             target[prop] = value;
-            
+
             if ((prop.includes('Shown') || prop === 'currentTheme') && oldValue !== value) {
                 debouncedSave();
             }
-            
+
             return true;
         }
     });
@@ -229,13 +239,13 @@
     // ===== THEME SYSTEM =====
     function applyTheme(themeName) {
         const theme = THEMES[themeName] || THEMES.cyan;
-        
+
         document.documentElement.style.setProperty('--nova-primary', theme.primary);
         document.documentElement.style.setProperty('--nova-primary-rgb', theme.primaryRgb);
         document.documentElement.style.setProperty('--nova-shadow', theme.shadow);
-        
+
         state.currentTheme = themeName;
-        
+
         if (cachedElements.hint) {
             cachedElements.hint.style.color = theme.primary;
             cachedElements.hint.style.textShadow = `
@@ -244,7 +254,7 @@
                 0 0 14px ${theme.shadow}
             `;
         }
-        
+
         console.log(`[NovaCore] Applied theme: ${theme.name}`);
     }
 
@@ -252,11 +262,11 @@
     function compareVersions(v1, v2) {
         const parts1 = v1.split('.').map(Number);
         const parts2 = v2.split('.').map(Number);
-        
+
         for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
             const part1 = parts1[i] || 0;
             const part2 = parts2[i] || 0;
-            
+
             if (part1 > part2) return 1;
             if (part1 < part2) return -1;
         }
@@ -267,7 +277,7 @@
         return safeExecute(() => {
             const notification = document.createElement('div');
             notification.className = 'update-notification';
-            
+
             notification.innerHTML = `
                 <div class="update-notification-header">
                     🎉 Update Available!
@@ -282,18 +292,18 @@
                     <button class="update-notification-btn dismiss" id="dismiss-btn">Later</button>
                 </div>
             `;
-            
+
             document.body.appendChild(notification);
-            
+
             document.getElementById('update-btn').addEventListener('click', async () => {
                 try {
                     const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`);
                     const scriptContent = await response.text();
-                    
+
                     // Create a blob URL that Tampermonkey will intercept
                     const blob = new Blob([scriptContent], { type: 'text/javascript' });
                     const url = URL.createObjectURL(blob);
-                    
+
                     // Create a temporary link and click it
                     const a = document.createElement('a');
                     a.href = url;
@@ -302,24 +312,24 @@
                     a.click();
                     document.body.removeChild(a);
                     URL.revokeObjectURL(url);
-                    
+
                     notification.remove();
                 } catch (error) {
                     console.error('[NovaCore] Update failed:', error);
                     alert('Update failed. Please try updating manually from GitHub.');
                 }
             });
-            
+
             document.getElementById('dismiss-btn').addEventListener('click', () => {
                 notification.remove();
             });
-            
+
             setTimeout(() => {
                 if (notification.parentElement) {
                     notification.remove();
                 }
             }, 30000);
-            
+
         }, null, 'showUpdateNotification');
     }
 
@@ -327,48 +337,65 @@
         return safeExecute(async () => {
             const lastCheck = localStorage.getItem(LAST_UPDATE_CHECK_KEY);
             const now = Date.now();
-            
+
             if (!manual && lastCheck && (now - parseInt(lastCheck)) < UPDATE_CHECK_INTERVAL) {
                 console.log('[NovaCore] Skipping update check (checked recently)');
                 return;
             }
-            
+
             console.log('[NovaCore] Checking for updates...');
-            
+
             try {
                 const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, {
                     cache: 'no-cache'
                 });
-                
+
                 if (!response.ok) {
                     throw new Error('Failed to fetch update');
                 }
-                
+
                 const scriptContent = await response.text();
                 const versionMatch = scriptContent.match(/@version\s+(\d+\.\d+)/);
-                
+
                 if (versionMatch) {
                     const latestVersion = versionMatch[1];
                     state.latestVersion = latestVersion;
-                    
+
                     localStorage.setItem(LAST_UPDATE_CHECK_KEY, now.toString());
-                    
+
                     const comparison = compareVersions(latestVersion, SCRIPT_VERSION);
-                    
+
                     if (comparison > 0) {
                         console.log(`[NovaCore] Update available: v${latestVersion}`);
                         state.updateAvailable = true;
                         showUpdateNotification(latestVersion);
-                        
+
                         // Update the GUI button
                         if (cachedElements.checkUpdateBtn) {
                             cachedElements.checkUpdateBtn.textContent = '🎉 Update Now!';
                             cachedElements.checkUpdateBtn.classList.add('update-now-btn');
-                            cachedElements.checkUpdateBtn.onclick = () => {
-                                window.open(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, '_blank');
+                            cachedElements.checkUpdateBtn.onclick = async () => {
+                                try {
+                                    const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`);
+                                    const scriptContent = await response.text();
+
+                                    const blob = new Blob([scriptContent], { type: 'text/javascript' });
+                                    const url = URL.createObjectURL(blob);
+
+                                    const a = document.createElement('a');
+                                    a.href = url;
+                                    a.download = 'NCUserscript.user.js';
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                    URL.revokeObjectURL(url);
+                                } catch (error) {
+                                    console.error('[NovaCore] Update failed:', error);
+                                    alert('Update failed. Please try updating manually from GitHub.');
+                                }
                             };
                         }
-                        
+
                         if (manual && cachedElements.updateStatus) {
                             cachedElements.updateStatus.textContent = `✨ v${latestVersion} available!`;
                             cachedElements.updateStatus.style.color = '#2ecc71';
@@ -1128,7 +1155,8 @@
                     lastTime = currentTime;
                 }
 
-                if (state.counters.fps) {
+                // Only continue if counter still exists
+                if (state.counters.fps && state.fpsShown) {
                     state.rafId = requestAnimationFrame(updateFPS);
                 }
             }
@@ -1139,19 +1167,22 @@
 
     function stopFPSCounter() {
         safeExecute(() => {
+            // Set flag first to stop animation loop
+            state.fpsShown = false;
+
             if (state.cleanupFunctions.fps) {
                 state.cleanupFunctions.fps();
                 state.cleanupFunctions.fps = null;
             }
-            
-            if (state.counters.fps) {
-                state.counters.fps.remove();
-                state.counters.fps = null;
-            }
-            
+
             if (state.rafId) {
                 cancelAnimationFrame(state.rafId);
                 state.rafId = null;
+            }
+
+            if (state.counters.fps) {
+                state.counters.fps.remove();
+                state.counters.fps = null;
             }
         }, null, 'stopFPSCounter');
     }
@@ -1185,12 +1216,12 @@
 
             const dragCleanup = setupDragging(counter, 'cps');
             window.addEventListener('mousedown', cpsClickListener);
-            
+
             state.cleanupFunctions.cps = () => {
                 dragCleanup();
                 window.removeEventListener('mousedown', cpsClickListener);
             };
-            
+
             return counter;
         }, null, 'createCPSCounter');
     }
@@ -1221,12 +1252,12 @@
                 state.cleanupFunctions.cps();
                 state.cleanupFunctions.cps = null;
             }
-            
+
             if (state.counters.cps) {
                 state.counters.cps.remove();
                 state.counters.cps = null;
             }
-            
+
             if (state.intervals.cps) {
                 clearInterval(state.intervals.cps);
                 state.intervals.cps = null;
@@ -1302,24 +1333,24 @@
             // Generate a unique session ID for this page load
             const currentSessionId = Date.now() + '_' + Math.random();
             const savedSessionId = sessionStorage.getItem(SESSION_ID_KEY);
-            
+
             // If session IDs don't match, this is a new session (reload/new tab)
             if (!savedSessionId || savedSessionId !== currentSessionId) {
                 // Store new session ID in sessionStorage (clears on tab close/reload)
                 sessionStorage.setItem(SESSION_ID_KEY, currentSessionId);
-                
+
                 // Reset the timer
                 const now = Date.now();
                 localStorage.setItem(SESSION_START_KEY, now.toString());
                 return now;
             }
-            
+
             // Same session, return saved time
             const saved = localStorage.getItem(SESSION_START_KEY);
             if (saved) {
                 return parseInt(saved, 10);
             }
-            
+
             // Fallback: create new timer
             const now = Date.now();
             localStorage.setItem(SESSION_START_KEY, now.toString());
@@ -1412,17 +1443,113 @@
                 state.cleanupFunctions.sessionTimer();
                 state.cleanupFunctions.sessionTimer = null;
             }
-            
+
             if (state.counters.sessionTimer) {
                 state.counters.sessionTimer.remove();
                 state.counters.sessionTimer = null;
             }
-            
+
             if (state.intervals.sessionTimer) {
                 clearInterval(state.intervals.sessionTimer);
                 state.intervals.sessionTimer = null;
             }
         }, null, 'stopSessionTimer');
+    }
+
+    // ===== ANTI-AFK =====
+    function createAntiAfkCounter() {
+        return safeExecute(() => {
+            const counter = document.createElement('div');
+            counter.id = 'anti-afk-counter';
+            counter.className = 'counter';
+            counter.style.left = '50px';
+            counter.style.top = '290px';
+
+            const timeText = document.createElement('span');
+            timeText.className = 'counter-time-text';
+            counter.appendChild(timeText);
+
+            const tooltip = document.createElement('div');
+            tooltip.className = 'counter-tooltip';
+            tooltip.textContent = 'Anti-AFK - Auto jumps to prevent kick';
+            counter.appendChild(tooltip);
+
+            document.body.appendChild(counter);
+            state.counters.antiAfk = counter;
+
+            state.cleanupFunctions.antiAfk = setupDragging(counter, 'antiAfk');
+            return counter;
+        }, null, 'createAntiAfkCounter');
+    }
+
+    function pressSpace() {
+        const down = new KeyboardEvent("keydown", {
+            key: " ",
+            code: "Space",
+            keyCode: 32,
+            which: 32,
+            bubbles: true,
+        });
+        const up = new KeyboardEvent("keyup", {
+            key: " ",
+            code: "Space",
+            keyCode: 32,
+            which: 32,
+            bubbles: true,
+        });
+        window.dispatchEvent(down);
+        setTimeout(() => window.dispatchEvent(up), 50);
+    }
+
+    function updateAntiAfkCounter() {
+        safeExecute(() => {
+            if (!state.counters.antiAfk) return;
+
+            const timeText = state.counters.antiAfk.querySelector('.counter-time-text');
+            if (timeText) {
+                timeText.textContent = `⚡ Jumping in ${state.antiAfkCountdown}s`;
+            }
+        }, null, 'updateAntiAfkCounter');
+    }
+
+    function startAntiAfk() {
+        safeExecute(() => {
+            if (!state.counters.antiAfk) createAntiAfkCounter();
+
+            state.antiAfkCountdown = 5;
+            updateAntiAfkCounter();
+
+            state.intervals.antiAfk = setInterval(() => {
+                state.antiAfkCountdown--;
+                updateAntiAfkCounter();
+
+                if (state.antiAfkCountdown <= 0) {
+                    pressSpace();
+                    state.antiAfkCountdown = 5;
+                }
+            }, 1000);
+        }, null, 'startAntiAfk');
+    }
+
+    function stopAntiAfk() {
+        safeExecute(() => {
+            if (state.cleanupFunctions.antiAfk) {
+                state.cleanupFunctions.antiAfk();
+                state.cleanupFunctions.antiAfk = null;
+            }
+
+            if (state.counters.antiAfk) {
+                state.counters.antiAfk.remove();
+                state.counters.antiAfk = null;
+            }
+
+            if (state.intervals.antiAfk) {
+                clearInterval(state.intervals.antiAfk);
+                state.intervals.antiAfk = null;
+            }
+
+            state.antiAfkCountdown = 5;
+        }, null, 'stopAntiAfk');
     }
 
     // ===== MENU =====
@@ -1444,13 +1571,13 @@
             fpsBtn.textContent = 'FPS Counter';
             fpsBtn.addEventListener('click', () => {
                 if (state.fpsShown) {
+                    state.fpsShown = false;
                     stopFPSCounter();
                     fpsBtn.textContent = 'FPS Counter';
-                    state.fpsShown = false;
                 } else {
+                    state.fpsShown = true;
                     startFPSCounter();
                     fpsBtn.textContent = 'Hide FPS Counter';
-                    state.fpsShown = true;
                 }
             });
             menuContent.appendChild(fpsBtn);
@@ -1503,6 +1630,22 @@
             });
             menuContent.appendChild(sessionTimerBtn);
 
+            const antiAfkBtn = document.createElement('button');
+            antiAfkBtn.className = 'nova-menu-btn';
+            antiAfkBtn.textContent = 'Anti-AFK';
+            antiAfkBtn.addEventListener('click', () => {
+                if (state.antiAfkEnabled) {
+                    stopAntiAfk();
+                    antiAfkBtn.textContent = 'Anti-AFK';
+                    state.antiAfkEnabled = false;
+                } else {
+                    startAntiAfk();
+                    antiAfkBtn.textContent = 'Disable Anti-AFK';
+                    state.antiAfkEnabled = true;
+                }
+            });
+            menuContent.appendChild(antiAfkBtn);
+
             const fullscreenBtn = document.createElement('button');
             fullscreenBtn.className = 'nova-menu-btn';
             fullscreenBtn.textContent = 'Auto Fullscreen';
@@ -1536,7 +1679,7 @@
                 const themeBtn = document.createElement('button');
                 themeBtn.className = `theme-btn ${themeKey}`;
                 themeBtn.textContent = theme.name.replace(' (Default)', '');
-                
+
                 if (state.currentTheme === themeKey) {
                     themeBtn.classList.add('active');
                 }
@@ -1631,6 +1774,7 @@
             cachedElements.cpsBtn = cpsBtn;
             cachedElements.realTimeBtn = realTimeBtn;
             cachedElements.sessionTimerBtn = sessionTimerBtn;
+            cachedElements.antiAfkBtn = antiAfkBtn;
             cachedElements.fullscreenBtn = fullscreenBtn;
 
             menuOverlay.addEventListener('click', (e) => {
@@ -1760,6 +1904,19 @@
                     state.counters.sessionTimer.style.top = settings.positions.sessionTimer.top;
                 }
             }
+
+            if (settings.antiAfkEnabled) {
+                startAntiAfk();
+                state.antiAfkEnabled = true;
+                if (cachedElements.antiAfkBtn) {
+                    cachedElements.antiAfkBtn.textContent = 'Disable Anti-AFK';
+                }
+
+                if (settings.positions?.antiAfk && state.counters.antiAfk) {
+                    state.counters.antiAfk.style.left = settings.positions.antiAfk.left;
+                    state.counters.antiAfk.style.top = settings.positions.antiAfk.top;
+                }
+            }
         }, null, 'restoreSavedState');
     }
 
@@ -1767,24 +1924,25 @@
     function globalCleanup() {
         safeExecute(() => {
             console.log('[NovaCore] Cleaning up resources...');
-            
+
             stopFPSCounter();
             stopCPSCounter();
             stopRealTimeCounter();
             stopSessionTimer();
-            
+            stopAntiAfk();
+
             Object.values(state.intervals).forEach(interval => {
                 if (interval) clearInterval(interval);
             });
-            
+
             if (state.rafId) {
                 cancelAnimationFrame(state.rafId);
             }
-            
+
             Object.values(state.cleanupFunctions).forEach(cleanup => {
                 if (cleanup) cleanup();
             });
-            
+
             console.log('[NovaCore] Cleanup complete');
         }, null, 'globalCleanup');
     }
@@ -1795,7 +1953,7 @@
     function init() {
         safeExecute(() => {
             console.log(`[NovaCore] Initializing version ${SCRIPT_VERSION}...`);
-            
+
             const intro = createIntro();
             const header = createPersistentHeader();
             const hint = createHintText();
@@ -1817,7 +1975,7 @@
 
                     restoreSavedState();
                     console.log('[NovaCore] Initialization complete');
-                    
+
                     // Check for updates after initialization
                     setTimeout(() => checkForUpdates(false), 2000);
                 }, TIMING.INTRO_FADE_OUT);
