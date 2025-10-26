@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         NovaCore V2.5 Enhanced
+// @name         NovaCore V2.6 Enhanced
 // @namespace    http://github.com/TheM1ddleM1n/
-// @version      2.5
-// @description  NovaCore V2 with improved performance, memory management, code quality, themes, and github updater!
+// @version      2.6
+// @description  NovaCore V2 with improved performance, memory management, code quality, themes, github updater!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
 // @grant        none
@@ -81,7 +81,7 @@
     const DEFAULT_MENU_KEY = '\\';
     const SESSION_START_KEY = 'novacore_session_start';
     const SESSION_ID_KEY = 'novacore_session_id';
-    const SCRIPT_VERSION = '2.5';
+    const SCRIPT_VERSION = '2.6';
     const GITHUB_REPO = 'TheM1ddleM1n/NovaCoreForMiniblox';
     const LAST_UPDATE_CHECK_KEY = 'novacore_last_update_check';
     const UPDATE_CHECK_INTERVAL = 3600000; // 1 hour in milliseconds
@@ -120,7 +120,9 @@
             cps: null,
             realTime: null,
             sessionTimer: null
-        }
+        },
+        updateAvailable: false,
+        latestVersion: null
     };
 
     const cachedElements = {};
@@ -244,6 +246,132 @@
         }
 
         console.log(`[NovaCore] Applied theme: ${theme.name}`);
+    }
+
+    // ===== UPDATE CHECKER =====
+    function compareVersions(v1, v2) {
+        const parts1 = v1.split('.').map(Number);
+        const parts2 = v2.split('.').map(Number);
+
+        for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+            const part1 = parts1[i] || 0;
+            const part2 = parts2[i] || 0;
+
+            if (part1 > part2) return 1;
+            if (part1 < part2) return -1;
+        }
+        return 0;
+    }
+
+    function showUpdateNotification(latestVersion) {
+        return safeExecute(() => {
+            const notification = document.createElement('div');
+            notification.className = 'update-notification';
+
+            notification.innerHTML = `
+                <div class="update-notification-header">
+                    🎉 Update Available!
+                </div>
+                <div class="update-notification-body">
+                    A new version of NovaCore is available!<br>
+                    Current: <span class="update-notification-version">v${SCRIPT_VERSION}</span><br>
+                    Latest: <span class="update-notification-version">v${latestVersion}</span>
+                </div>
+                <div class="update-notification-buttons">
+                    <button class="update-notification-btn" id="update-btn">Update Now</button>
+                    <button class="update-notification-btn dismiss" id="dismiss-btn">Later</button>
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+
+            document.getElementById('update-btn').addEventListener('click', () => {
+                window.open(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, '_blank');
+                notification.remove();
+            });
+
+            document.getElementById('dismiss-btn').addEventListener('click', () => {
+                notification.remove();
+            });
+
+            setTimeout(() => {
+                if (notification.parentElement) {
+                    notification.remove();
+                }
+            }, 30000);
+
+        }, null, 'showUpdateNotification');
+    }
+
+    async function checkForUpdates(manual = false) {
+        return safeExecute(async () => {
+            const lastCheck = localStorage.getItem(LAST_UPDATE_CHECK_KEY);
+            const now = Date.now();
+
+            if (!manual && lastCheck && (now - parseInt(lastCheck)) < UPDATE_CHECK_INTERVAL) {
+                console.log('[NovaCore] Skipping update check (checked recently)');
+                return;
+            }
+
+            console.log('[NovaCore] Checking for updates...');
+
+            try {
+                const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, {
+                    cache: 'no-cache'
+                });
+
+                if (!response.ok) {
+                    throw new Error('Failed to fetch update');
+                }
+
+                const scriptContent = await response.text();
+                const versionMatch = scriptContent.match(/@version\s+(\d+\.\d+)/);
+
+                if (versionMatch) {
+                    const latestVersion = versionMatch[1];
+                    state.latestVersion = latestVersion;
+
+                    localStorage.setItem(LAST_UPDATE_CHECK_KEY, now.toString());
+
+                    const comparison = compareVersions(latestVersion, SCRIPT_VERSION);
+
+                    if (comparison > 0) {
+                        console.log(`[NovaCore] Update available: v${latestVersion}`);
+                        state.updateAvailable = true;
+                        showUpdateNotification(latestVersion);
+
+                        // Update the GUI button
+                        if (cachedElements.checkUpdateBtn) {
+                            cachedElements.checkUpdateBtn.textContent = '🎉 Update Now!';
+                            cachedElements.checkUpdateBtn.classList.add('update-now-btn');
+                            cachedElements.checkUpdateBtn.onclick = () => {
+                                window.open(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, '_blank');
+                            };
+                        }
+
+                        if (manual && cachedElements.updateStatus) {
+                            cachedElements.updateStatus.textContent = `✨ v${latestVersion} available!`;
+                            cachedElements.updateStatus.style.color = '#2ecc71';
+                        }
+                    } else {
+                        console.log('[NovaCore] You are on the latest version');
+                        state.updateAvailable = false;
+                        if (manual && cachedElements.updateStatus) {
+                            cachedElements.updateStatus.textContent = '✓ You are on the latest version!';
+                            cachedElements.updateStatus.style.color = '#2ecc71';
+                        }
+                    }
+                } else {
+                    throw new Error('Could not parse version');
+                }
+            } catch (error) {
+                console.error('[NovaCore] Update check failed:', error);
+                if (manual && cachedElements.updateStatus) {
+                    cachedElements.updateStatus.textContent = '✗ Update check failed';
+                    cachedElements.updateStatus.style.color = '#e74c3c';
+                }
+            }
+        }, null, 'checkForUpdates');
     }
 
     // ===== STYLES =====
@@ -671,6 +799,121 @@
     .theme-btn.gold { border-color: #f39c12; color: #f39c12; }
     .theme-btn.pink { border-color: #ff69b4; color: #ff69b4; }
     .theme-btn.orange { border-color: #ff6b35; color: #ff6b35; }
+
+    .update-notification {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.95);
+        border: 2px solid var(--nova-primary);
+        border-radius: 12px;
+        padding: 16px 20px;
+        color: white;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-shadow: 0 0 20px rgba(var(--nova-primary-rgb), 0.6);
+        z-index: 100000001;
+        max-width: 320px;
+        animation: slideInRight 0.5s ease;
+        user-select: none;
+    }
+
+    @keyframes slideInRight {
+        from {
+            opacity: 0;
+            transform: translateX(400px);
+        }
+        to {
+            opacity: 1;
+            transform: translateX(0);
+        }
+    }
+
+    .update-notification-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 12px;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--nova-primary);
+    }
+
+    .update-notification-body {
+        font-size: 0.95rem;
+        line-height: 1.5;
+        margin-bottom: 14px;
+        color: #ddd;
+    }
+
+    .update-notification-version {
+        color: var(--nova-primary);
+        font-weight: 700;
+    }
+
+    .update-notification-buttons {
+        display: flex;
+        gap: 10px;
+    }
+
+    .update-notification-btn {
+        flex: 1;
+        background: #000;
+        border: 2px solid var(--nova-primary);
+        color: var(--nova-primary);
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .update-notification-btn:hover {
+        background: var(--nova-primary);
+        color: #000;
+        transform: translateY(-2px);
+    }
+
+    .update-notification-btn.dismiss {
+        border-color: #666;
+        color: #999;
+    }
+
+    .update-notification-btn.dismiss:hover {
+        background: #666;
+        color: white;
+    }
+
+    .update-check-status {
+        font-size: 0.85rem;
+        color: #999;
+        text-align: center;
+        margin-top: 8px;
+        font-style: italic;
+    }
+
+    .update-now-btn {
+        background: linear-gradient(135deg, #2ecc71, #27ae60) !important;
+        border: 2px solid #2ecc71 !important;
+        color: white !important;
+        animation: pulse 2s infinite;
+        font-weight: 900 !important;
+    }
+
+    .update-now-btn:hover {
+        background: linear-gradient(135deg, #27ae60, #229954) !important;
+        color: white !important;
+        box-shadow: 0 4px 20px rgba(46, 204, 113, 0.6) !important;
+    }
+
+    @keyframes pulse {
+        0%, 100% {
+            box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
+        }
+        50% {
+            box-shadow: 0 0 20px rgba(46, 204, 113, 0.8);
+        }
+    }
 
     @media (max-width: 768px) {
         #nova-persistent-header {
@@ -1325,6 +1568,41 @@
             settingsSection.appendChild(keybindInput);
             menuContent.appendChild(settingsSection);
 
+            // Update checker section
+            const updateSection = document.createElement('div');
+            updateSection.className = 'settings-section';
+
+            const updateLabel = document.createElement('label');
+            updateLabel.className = 'settings-label';
+            updateLabel.textContent = 'Updates:';
+            updateSection.appendChild(updateLabel);
+
+            const checkUpdateBtn = document.createElement('button');
+            checkUpdateBtn.className = 'nova-menu-btn';
+            checkUpdateBtn.textContent = 'Check for Updates';
+            checkUpdateBtn.addEventListener('click', () => {
+                checkUpdateBtn.textContent = 'Checking...';
+                checkUpdateBtn.disabled = true;
+                checkForUpdates(true).finally(() => {
+                    setTimeout(() => {
+                        if (!state.updateAvailable) {
+                            checkUpdateBtn.textContent = 'Check for Updates';
+                        }
+                        checkUpdateBtn.disabled = false;
+                    }, 2000);
+                });
+            });
+            updateSection.appendChild(checkUpdateBtn);
+            cachedElements.checkUpdateBtn = checkUpdateBtn;
+
+            const updateStatus = document.createElement('div');
+            updateStatus.className = 'update-check-status';
+            updateStatus.textContent = `Current version: v${SCRIPT_VERSION}`;
+            updateSection.appendChild(updateStatus);
+            cachedElements.updateStatus = updateStatus;
+
+            menuContent.appendChild(updateSection);
+
             menuOverlay.appendChild(menuContent);
             document.body.appendChild(menuOverlay);
 
@@ -1519,6 +1797,9 @@
 
                     restoreSavedState();
                     console.log('[NovaCore] Initialization complete');
+
+                    // Check for updates after initialization
+                    setTimeout(() => checkForUpdates(false), 2000);
                 }, TIMING.INTRO_FADE_OUT);
             }, TIMING.INTRO_TOTAL_DURATION);
         }, null, 'init');
