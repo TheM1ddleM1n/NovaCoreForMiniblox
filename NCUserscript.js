@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         NovaCore V2.4 Enhanced
+// @name         NovaCore V2.5 Enhanced
 // @namespace    http://github.com/TheM1ddleM1n/
-// @version      2.4
+// @version      2.5
 // @description  NovaCore V2 with improved performance, memory management, code quality, themes, and github updater!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
@@ -81,7 +81,7 @@
     const DEFAULT_MENU_KEY = '\\';
     const SESSION_START_KEY = 'novacore_session_start';
     const SESSION_ID_KEY = 'novacore_session_id';
-    const SCRIPT_VERSION = '2.4';
+    const SCRIPT_VERSION = '2.5';
     const GITHUB_REPO = 'TheM1ddleM1n/NovaCoreForMiniblox';
     const LAST_UPDATE_CHECK_KEY = 'novacore_last_update_check';
     const UPDATE_CHECK_INTERVAL = 3600000; // 1 hour in milliseconds
