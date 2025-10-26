@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         NovaCore V2.2 Enhanced
-// @namespace    http://github.com/TheM1ddleM1n
-// @version      2.2
-// @description  NovaCore V2 with improved performance, memory management, and code quality
+// @name         NovaCore V2.3 Enhanced
+// @namespace    http://github.com/TheM1ddleM1n/
+// @version      2.3
+// @description  NovaCore V2 with improved performance, memory management, code quality, and themes!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
 // @grant        none
@@ -26,10 +26,62 @@
         SAVE_DEBOUNCE: 500
     };
 
+    const THEMES = {
+        cyan: {
+            name: 'Cyan (Default)',
+            primary: '#00ffff',
+            primaryRgb: '0, 255, 255',
+            shadow: '#00ffff'
+        },
+        purple: {
+            name: 'Purple Dream',
+            primary: '#9b59b6',
+            primaryRgb: '155, 89, 182',
+            shadow: '#9b59b6'
+        },
+        green: {
+            name: 'Matrix Green',
+            primary: '#2ecc71',
+            primaryRgb: '46, 204, 113',
+            shadow: '#2ecc71'
+        },
+        red: {
+            name: 'Crimson Fire',
+            primary: '#e74c3c',
+            primaryRgb: '231, 76, 60',
+            shadow: '#e74c3c'
+        },
+        blue: {
+            name: 'Ocean Blue',
+            primary: '#3498db',
+            primaryRgb: '52, 152, 219',
+            shadow: '#3498db'
+        },
+        gold: {
+            name: 'Golden Glow',
+            primary: '#f39c12',
+            primaryRgb: '243, 156, 18',
+            shadow: '#f39c12'
+        },
+        pink: {
+            name: 'Bubblegum Pink',
+            primary: '#ff69b4',
+            primaryRgb: '255, 105, 180',
+            shadow: '#ff69b4'
+        },
+        orange: {
+            name: 'Sunset Orange',
+            primary: '#ff6b35',
+            primaryRgb: '255, 107, 53',
+            shadow: '#ff6b35'
+        }
+    };
+
     const SETTINGS_KEY = 'novacore_settings';
     const DEFAULT_MENU_KEY = '\\';
     const SESSION_START_KEY = 'novacore_session_start';
-    const SCRIPT_VERSION = '2.2';
+    const SESSION_ID_KEY = 'novacore_session_id';
+    const SCRIPT_VERSION = '2.3';
 
     // ===== STATE MANAGEMENT WITH PROXY =====
     const stateData = {
@@ -38,6 +90,7 @@
         realTimeShown: false,
         sessionTimerShown: false,
         menuKey: DEFAULT_MENU_KEY,
+        currentTheme: 'cyan',
         counters: {
             fps: null,
             cps: null,
@@ -67,7 +120,6 @@
         }
     };
 
-    // Cached DOM references
     const cachedElements = {};
 
     // ===== UTILITY FUNCTIONS =====
@@ -89,6 +141,7 @@
                 realTimeShown: stateData.realTimeShown,
                 sessionTimerShown: stateData.sessionTimerShown,
                 menuKey: stateData.menuKey,
+                currentTheme: stateData.currentTheme,
                 positions: {
                     fps: stateData.counters.fps ? {
                         left: stateData.counters.fps.style.left,
@@ -116,6 +169,9 @@
         if (!settings.version) {
             console.log('[NovaCore] Migrating settings from old version');
             settings.version = SCRIPT_VERSION;
+        }
+        if (!settings.currentTheme) {
+            settings.currentTheme = 'cyan';
         }
         return settings;
     }
@@ -152,13 +208,12 @@
 
     const debouncedSave = debounce(saveSettings, TIMING.SAVE_DEBOUNCE);
 
-    // Reactive state with auto-save
     const state = new Proxy(stateData, {
         set(target, prop, value) {
             const oldValue = target[prop];
             target[prop] = value;
 
-            if (prop.includes('Shown') && oldValue !== value) {
+            if ((prop.includes('Shown') || prop === 'currentTheme') && oldValue !== value) {
                 debouncedSave();
             }
 
@@ -166,10 +221,38 @@
         }
     });
 
+    // ===== THEME SYSTEM =====
+    function applyTheme(themeName) {
+        const theme = THEMES[themeName] || THEMES.cyan;
+
+        document.documentElement.style.setProperty('--nova-primary', theme.primary);
+        document.documentElement.style.setProperty('--nova-primary-rgb', theme.primaryRgb);
+        document.documentElement.style.setProperty('--nova-shadow', theme.shadow);
+
+        state.currentTheme = themeName;
+
+        if (cachedElements.hint) {
+            cachedElements.hint.style.color = theme.primary;
+            cachedElements.hint.style.textShadow = `
+                0 0 4px ${theme.shadow},
+                0 0 10px ${theme.shadow},
+                0 0 14px ${theme.shadow}
+            `;
+        }
+
+        console.log(`[NovaCore] Applied theme: ${theme.name}`);
+    }
+
     // ===== STYLES =====
     const style = document.createElement('style');
     style.textContent = `
     @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+    :root {
+        --nova-primary: #00ffff;
+        --nova-primary-rgb: 0, 255, 255;
+        --nova-shadow: #00ffff;
+    }
 
     @keyframes slideDownInTop {
         from {opacity: 0; transform: translate(-50%, -70px);}
@@ -293,19 +376,19 @@
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-weight: 900;
         font-size: 1.5rem;
-        color: #00ffff;
+        color: var(--nova-primary);
         text-shadow:
-            0 0 8px #00ffff,
-            0 0 20px #00ffff,
-            0 0 30px #00ffff,
-            0 0 40px #00ffff,
-            0 0 50px #00ffff;
+            0 0 8px var(--nova-shadow),
+            0 0 20px var(--nova-shadow),
+            0 0 30px var(--nova-shadow),
+            0 0 40px var(--nova-shadow),
+            0 0 50px var(--nova-shadow);
         user-select: none;
         z-index: 100000000;
         pointer-events: none;
         white-space: nowrap;
         opacity: 0;
-        transition: opacity 0.5s ease;
+        transition: opacity 0.5s ease, color 0.3s ease, text-shadow 0.3s ease;
     }
 
     #nova-persistent-header.visible {
@@ -338,15 +421,16 @@
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-size: 3rem;
         font-weight: 900;
-        color: #00ffff;
+        color: var(--nova-primary);
         text-shadow:
-            0 0 8px #00ffff,
-            0 0 20px #00ffff,
-            0 0 30px #00ffff,
-            0 0 40px #00ffff,
-            0 0 50px #00ffff;
+            0 0 8px var(--nova-shadow),
+            0 0 20px var(--nova-shadow),
+            0 0 30px var(--nova-shadow),
+            0 0 40px var(--nova-shadow),
+            0 0 50px var(--nova-shadow);
         user-select: none;
         margin-bottom: 30px;
+        transition: color 0.3s ease, text-shadow 0.3s ease;
     }
 
     #nova-menu-content {
@@ -357,24 +441,26 @@
         color: white;
         font-size: 1.1rem;
         box-shadow:
-            0 0 10px #00ffff88,
-            inset 0 0 8px #00ffff44;
+            0 0 10px rgba(var(--nova-primary-rgb), 0.5),
+            inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
         user-select: none;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 24px;
         max-height: 80vh;
         overflow-y: auto;
+        transition: box-shadow 0.3s ease;
     }
 
     .nova-menu-btn {
         background: #000000cc;
-        border: 2px solid #00ffff;
-        color: #00ffff;
+        border: 2px solid var(--nova-primary);
+        color: var(--nova-primary);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-weight: 700;
         font-size: 1rem;
-        padding: 12px 20px;
+        padding: 16px 20px;
+        margin-bottom: 4px;
         border-radius: 10px;
         cursor: pointer;
         transition: all 0.3s ease;
@@ -392,7 +478,7 @@
         width: 0;
         height: 0;
         border-radius: 50%;
-        background: rgba(0, 255, 255, 0.3);
+        background: rgba(var(--nova-primary-rgb), 0.3);
         transform: translate(-50%, -50%);
         transition: width 0.6s ease, height 0.6s ease;
     }
@@ -403,10 +489,10 @@
     }
 
     .nova-menu-btn:hover {
-        background: #00ffff;
+        background: var(--nova-primary);
         color: #000;
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 255, 255, 0.4);
+        box-shadow: 0 4px 12px rgba(var(--nova-primary-rgb), 0.4);
     }
 
     #nova-hint-text {
@@ -415,23 +501,23 @@
         left: 50%;
         transform: translate(-50%, -50%);
         font-family: 'Press Start 2P', cursive;
-        color: #00ffff;
+        color: var(--nova-primary);
         font-size: 1.25rem;
         text-shadow:
-            0 0 4px #00ffff,
-            0 0 10px #00ffff,
-            0 0 14px #00ffff;
+            0 0 4px var(--nova-shadow),
+            0 0 10px var(--nova-shadow),
+            0 0 14px var(--nova-shadow);
         user-select: none;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 0.8s ease;
+        transition: opacity 0.8s ease, color 0.3s ease, text-shadow 0.3s ease;
         z-index: 9999999;
         white-space: nowrap;
     }
 
     .counter {
         position: fixed;
-        background: rgba(0, 255, 255, 0.85);
+        background: rgba(var(--nova-primary-rgb), 0.85);
         color: #000;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-weight: 700;
@@ -439,15 +525,15 @@
         padding: 8px 14px;
         border-radius: 12px;
         box-shadow:
-            0 0 8px #00ffffaa,
-            inset 0 0 8px #00ffff55;
+            0 0 8px rgba(var(--nova-primary-rgb), 0.7),
+            inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
         user-select: none;
         cursor: grab;
         z-index: 999999999;
         width: max-content;
         max-width: 160px;
         text-align: center;
-        transition: opacity 0.3s ease, transform 0.3s ease;
+        transition: opacity 0.3s ease, transform 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
         will-change: transform;
     }
 
@@ -461,7 +547,7 @@
         position: fixed;
         bottom: 10px;
         right: 10px;
-        background: rgba(0, 255, 255, 0.85);
+        background: rgba(var(--nova-primary-rgb), 0.85);
         color: #000;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-weight: 700;
@@ -469,14 +555,15 @@
         padding: 8px 14px;
         border-radius: 12px;
         box-shadow:
-            0 0 8px #00ffffaa,
-            inset 0 0 8px #00ffff55;
+            0 0 8px rgba(var(--nova-primary-rgb), 0.7),
+            inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
         cursor: default;
         user-select: none;
         z-index: 999999999;
         width: 180px;
         text-align: center;
         pointer-events: auto;
+        transition: background 0.3s ease, box-shadow 0.3s ease;
     }
 
     #real-time-counter .counter-time-text {
@@ -507,23 +594,25 @@
     }
 
     .settings-section {
-        border-top: 1px solid #00ffff44;
-        padding-top: 14px;
-        margin-top: 8px;
+        border-top: 1px solid rgba(var(--nova-primary-rgb), 0.3);
+        padding-top: 24px;
+        margin-top: 16px;
+        transition: border-color 0.3s ease;
     }
 
     .settings-label {
         font-size: 0.9rem;
-        color: #00ffff;
-        margin-bottom: 8px;
+        color: var(--nova-primary);
+        margin-bottom: 10px;
         display: block;
+        transition: color 0.3s ease;
     }
 
     .keybind-input {
         width: 100%;
         background: #000000cc;
-        border: 2px solid #00ffff;
-        color: #00ffff;
+        border: 2px solid var(--nova-primary);
+        color: var(--nova-primary);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-weight: 700;
         font-size: 1rem;
@@ -535,9 +624,50 @@
 
     .keybind-input:focus {
         outline: none;
-        box-shadow: 0 0 12px rgba(0, 255, 255, 0.6);
-        background: #00ffff22;
+        box-shadow: 0 0 12px rgba(var(--nova-primary-rgb), 0.6);
+        background: rgba(var(--nova-primary-rgb), 0.15);
     }
+
+    .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-top: 12px;
+    }
+
+    .theme-btn {
+        background: #000000cc;
+        border: 2px solid;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-weight: 600;
+        font-size: 0.85rem;
+        padding: 12px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        user-select: none;
+        text-align: center;
+        position: relative;
+    }
+
+    .theme-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .theme-btn.active {
+        box-shadow: 0 0 15px currentColor, inset 0 0 10px currentColor;
+        font-weight: 900;
+    }
+
+    .theme-btn.cyan { border-color: #00ffff; color: #00ffff; }
+    .theme-btn.purple { border-color: #9b59b6; color: #9b59b6; }
+    .theme-btn.green { border-color: #2ecc71; color: #2ecc71; }
+    .theme-btn.red { border-color: #e74c3c; color: #e74c3c; }
+    .theme-btn.blue { border-color: #3498db; color: #3498db; }
+    .theme-btn.gold { border-color: #f39c12; color: #f39c12; }
+    .theme-btn.pink { border-color: #ff69b4; color: #ff69b4; }
+    .theme-btn.orange { border-color: #ff6b35; color: #ff6b35; }
 
     @media (max-width: 768px) {
         #nova-persistent-header {
@@ -559,6 +689,10 @@
 
         .counter {
             font-size: 1rem;
+        }
+
+        .theme-grid {
+            grid-template-columns: 1fr;
         }
     }
     `;
@@ -703,8 +837,6 @@
             counter.appendChild(tooltip);
 
             document.body.appendChild(counter);
-            state.counters.fps = counter;
-
             state.cleanupFunctions.fps = setupDragging(counter, 'fps');
             return counter;
         }, null, 'createFPSCounter');
@@ -901,10 +1033,28 @@
     // ===== SESSION TIMER =====
     function getSessionStartTime() {
         return safeExecute(() => {
+            // Generate a unique session ID for this page load
+            const currentSessionId = Date.now() + '_' + Math.random();
+            const savedSessionId = sessionStorage.getItem(SESSION_ID_KEY);
+
+            // If session IDs don't match, this is a new session (reload/new tab)
+            if (!savedSessionId || savedSessionId !== currentSessionId) {
+                // Store new session ID in sessionStorage (clears on tab close/reload)
+                sessionStorage.setItem(SESSION_ID_KEY, currentSessionId);
+
+                // Reset the timer
+                const now = Date.now();
+                localStorage.setItem(SESSION_START_KEY, now.toString());
+                return now;
+            }
+
+            // Same session, return saved time
             const saved = localStorage.getItem(SESSION_START_KEY);
             if (saved) {
                 return parseInt(saved, 10);
             }
+
+            // Fallback: create new timer
             const now = Date.now();
             localStorage.setItem(SESSION_START_KEY, now.toString());
             return now;
@@ -1103,6 +1253,41 @@
             });
             menuContent.appendChild(fullscreenBtn);
 
+            // Theme section
+            const themeSection = document.createElement('div');
+            themeSection.className = 'settings-section';
+
+            const themeLabel = document.createElement('label');
+            themeLabel.className = 'settings-label';
+            themeLabel.textContent = 'Theme:';
+            themeSection.appendChild(themeLabel);
+
+            const themeGrid = document.createElement('div');
+            themeGrid.className = 'theme-grid';
+
+            Object.keys(THEMES).forEach(themeKey => {
+                const theme = THEMES[themeKey];
+                const themeBtn = document.createElement('button');
+                themeBtn.className = `theme-btn ${themeKey}`;
+                themeBtn.textContent = theme.name.replace(' (Default)', '');
+
+                if (state.currentTheme === themeKey) {
+                    themeBtn.classList.add('active');
+                }
+
+                themeBtn.addEventListener('click', () => {
+                    document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+                    themeBtn.classList.add('active');
+                    applyTheme(themeKey);
+                });
+
+                themeGrid.appendChild(themeBtn);
+            });
+
+            themeSection.appendChild(themeGrid);
+            menuContent.appendChild(themeSection);
+
+            // Keybind section
             const settingsSection = document.createElement('div');
             settingsSection.className = 'settings-section';
 
@@ -1222,6 +1407,10 @@
                 if (cachedElements.hint) {
                     cachedElements.hint.textContent = `Press ${state.menuKey} To Open Menu!`;
                 }
+            }
+
+            if (settings.currentTheme) {
+                applyTheme(settings.currentTheme);
             }
 
             if (settings.fpsShown) {
