@@ -1,6 +1,6 @@
 # NovaCoreForMiniblox
 
-NovaCore is a lightweight, modular Tampermonkey userscript (JavaScript) framework for Miniblox.  
+NovaCore is a lightweight, modular Tampermonkey userscript (using JavaScript) framework for [Miniblox](https://miniblox.io)!  
 This repository contains improvements, quality-of-life enhancements, and new features built on top of the original NovaCore V1 by @Scripter132132. The goal is to provide a modular, easy-to-configure userscript that scripters can extend and reuse.
 
 ## TL;DR
