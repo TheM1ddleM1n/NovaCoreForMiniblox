@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         NovaCore V2.7 Enhanced
+// @name         NovaCore V2.8 Enhanced
 // @namespace    http://github.com/TheM1ddleM1n/
-// @version      2.7
-// @description  NovaCore V2 with improved performance, memory management, code quality, and themes!
+// @version      2.8
+// @description  NovaCore V2 with improved performance, memory management, code quality, themes, and session stats!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
 // @grant        none
@@ -74,6 +74,12 @@
             primary: '#ff6b35',
             primaryRgb: '255, 107, 53',
             shadow: '#ff6b35'
+        },
+        custom: {
+            name: 'Custom',
+            primary: '#00ffff',
+            primaryRgb: '0, 255, 255',
+            shadow: '#00ffff'
         }
     };
 
@@ -81,10 +87,14 @@
     const DEFAULT_MENU_KEY = '\\';
     const SESSION_START_KEY = 'novacore_session_start';
     const SESSION_ID_KEY = 'novacore_session_id';
-    const SCRIPT_VERSION = '2.7';
+    const SESSION_STATS_KEY = 'novacore_session_stats';
+    const SESSION_COUNT_KEY = 'novacore_session_count';
+    const CUSTOM_COLOR_KEY = 'novacore_custom_color';
+    const SCRIPT_VERSION = '2.8';
     const GITHUB_REPO = 'TheM1ddleM1n/NovaCoreForMiniblox';
     const LAST_UPDATE_CHECK_KEY = 'novacore_last_update_check';
-    const UPDATE_CHECK_INTERVAL = 3600000; // 1 hour in milliseconds
+    const UPDATE_CHECK_INTERVAL = 3600000;
+    const DEBUG_LOG_KEY = 'novacore_debug_log';
 
     // ===== STATE MANAGEMENT WITH PROXY =====
     const stateData = {
@@ -128,15 +138,54 @@
         updateAvailable: false,
         latestVersion: null,
         antiAfkCountdown: 5,
-        performanceLoopRunning: false
+        performanceLoopRunning: false,
+        debugLog: [],
+        sessionStats: {
+            totalClicks: 0,
+            totalKeys: 0,
+            peakCPS: 0,
+            peakFPS: 0,
+            sessionCount: 0
+        }
     };
 
     const cachedElements = {};
-
-    // Global CPS listener reference for proper cleanup
     let cpsClickListenerRef = null;
 
     // ===== UTILITY FUNCTIONS =====
+    function logDebugEntry(context, error, severity = 'error') {
+        const entry = {
+            timestamp: new Date().toISOString(),
+            context,
+            message: error.message || error,
+            stack: error.stack || '',
+            severity
+        };
+
+        stateData.debugLog.push(entry);
+
+        if (stateData.debugLog.length > 100) {
+            stateData.debugLog.shift();
+        }
+
+        try {
+            localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(stateData.debugLog.slice(-50)));
+        } catch (e) {
+            console.warn('[NovaCore] Failed to save debug log:', e);
+        }
+    }
+
+    function loadDebugLog() {
+        try {
+            const saved = localStorage.getItem(DEBUG_LOG_KEY);
+            if (saved) {
+                stateData.debugLog = JSON.parse(saved);
+            }
+        } catch (e) {
+            console.warn('[NovaCore] Failed to load debug log:', e);
+        }
+    }
+
     function showErrorNotification(message) {
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -149,7 +198,6 @@
         `;
         notification.textContent = `⚠️ ${message}`;
         document.body.appendChild(notification);
-
         setTimeout(() => notification.remove(), 5000);
     }
 
@@ -158,12 +206,11 @@
             return fn();
         } catch (error) {
             console.error(`[NovaCore Error - ${context}]:`, error);
+            logDebugEntry(context, error, 'error');
 
-            // Show user-friendly notification for critical errors
             if (context.includes('Counter') || context.includes('Timer')) {
                 showErrorNotification(`Feature temporarily unavailable: ${context}`);
             }
-
             return fallbackValue;
         }
     }
@@ -208,7 +255,6 @@
             } catch (e) {
                 if (e.name === 'QuotaExceededError') {
                     console.warn('[NovaCore] Storage quota exceeded, clearing old data');
-                    // Clear old sessions but keep current settings
                     localStorage.removeItem(LAST_UPDATE_CHECK_KEY);
                     try {
                         localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -270,23 +316,36 @@
         set(target, prop, value) {
             const oldValue = target[prop];
             target[prop] = value;
-
             if ((prop.includes('Shown') || prop === 'currentTheme') && oldValue !== value) {
                 debouncedSave();
             }
-
             return true;
         }
     });
 
     // ===== THEME SYSTEM =====
+    function hexToRgb(hex) {
+        const rgb = parseInt(hex.slice(1), 16);
+        const r = (rgb >> 16) & 255;
+        const g = (rgb >> 8) & 255;
+        const b = rgb & 255;
+        return `${r}, ${g}, ${b}`;
+    }
+
+    function loadCustomTheme() {
+        const customColor = localStorage.getItem(CUSTOM_COLOR_KEY);
+        if (customColor) {
+            THEMES.custom.primary = customColor;
+            THEMES.custom.primaryRgb = hexToRgb(customColor);
+            THEMES.custom.shadow = customColor;
+        }
+    }
+
     function applyTheme(themeName) {
         const theme = THEMES[themeName] || THEMES.cyan;
-
         document.documentElement.style.setProperty('--nova-primary', theme.primary);
         document.documentElement.style.setProperty('--nova-primary-rgb', theme.primaryRgb);
         document.documentElement.style.setProperty('--nova-shadow', theme.shadow);
-
         state.currentTheme = themeName;
 
         if (cachedElements.hint) {
@@ -297,19 +356,65 @@
                 0 0 14px ${theme.shadow}
             `;
         }
-
         console.log(`[NovaCore] Applied theme: ${theme.name}`);
+    }
+
+    // ===== SESSION STATISTICS =====
+    function initSessionStats() {
+        safeExecute(() => {
+            const sessionCount = parseInt(localStorage.getItem(SESSION_COUNT_KEY) || '0') + 1;
+            state.sessionStats.sessionCount = sessionCount;
+            localStorage.setItem(SESSION_COUNT_KEY, sessionCount.toString());
+
+            const savedStats = localStorage.getItem(SESSION_STATS_KEY);
+            if (savedStats) {
+                try {
+                    const parsed = JSON.parse(savedStats);
+                    state.sessionStats.totalClicks = parsed.totalClicks || 0;
+                    state.sessionStats.totalKeys = parsed.totalKeys || 0;
+                } catch (e) {
+                    console.warn('[NovaCore] Failed to load session stats:', e);
+                }
+            }
+            console.log(`[NovaCore] Session #${sessionCount} started`);
+        }, null, 'initSessionStats');
+    }
+
+    function saveSessionStats() {
+        safeExecute(() => {
+            localStorage.setItem(SESSION_STATS_KEY, JSON.stringify(state.sessionStats));
+        }, null, 'saveSessionStats');
+    }
+
+    function showSessionStats() {
+        const stats = state.sessionStats;
+        const sessionTime = Date.now() - state.sessionStartTime;
+        const sessionMinutes = Math.floor(sessionTime / 60000);
+
+        const message = `
+╔═══════════════════════════════════╗
+║      NovaCore Session Stats       ║
+╠═══════════════════════════════════╣
+║ Session #: ${stats.sessionCount.toString().padEnd(23)}║
+║ Session Time: ${sessionMinutes}m${' '.repeat(19 - sessionMinutes.toString().length)}║
+║ Total Clicks: ${stats.totalClicks.toLocaleString().padEnd(19)}║
+║ Total Keys: ${stats.totalKeys.toLocaleString().padEnd(21)}║
+║ Peak CPS: ${stats.peakCPS.toString().padEnd(25)}║
+║ Peak FPS: ${stats.peakFPS.toString().padEnd(25)}║
+╚═══════════════════════════════════╝
+        `;
+
+        console.log(message);
+        alert('Session stats exported to console! Press F12 to view.');
     }
 
     // ===== UPDATE CHECKER =====
     function compareVersions(v1, v2) {
         const parts1 = v1.split('.').map(Number);
         const parts2 = v2.split('.').map(Number);
-
         for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
             const part1 = parts1[i] || 0;
             const part2 = parts2[i] || 0;
-
             if (part1 > part2) return 1;
             if (part1 < part2) return -1;
         }
@@ -320,11 +425,8 @@
         return safeExecute(() => {
             const notification = document.createElement('div');
             notification.className = 'update-notification';
-
             notification.innerHTML = `
-                <div class="update-notification-header">
-                    🎉 Update Available!
-                </div>
+                <div class="update-notification-header">🎉 Update Available!</div>
                 <div class="update-notification-body">
                     A new version of NovaCore is available!<br>
                     Current: <span class="update-notification-version">v${SCRIPT_VERSION}</span><br>
@@ -335,24 +437,15 @@
                     <button class="update-notification-btn dismiss" id="dismiss-btn">Later</button>
                 </div>
             `;
-
             document.body.appendChild(notification);
-
             document.getElementById('update-btn').addEventListener('click', () => {
                 window.open(`https://github.com/${GITHUB_REPO}/blob/main/NCUserscript.js`, '_blank');
                 notification.remove();
             });
-
-            document.getElementById('dismiss-btn').addEventListener('click', () => {
-                notification.remove();
-            });
-
+            document.getElementById('dismiss-btn').addEventListener('click', () => notification.remove());
             setTimeout(() => {
-                if (notification.parentElement) {
-                    notification.remove();
-                }
+                if (notification.parentElement) notification.remove();
             }, 30000);
-
         }, null, 'showUpdateNotification');
     }
 
@@ -360,40 +453,27 @@
         return safeExecute(async () => {
             const lastCheck = localStorage.getItem(LAST_UPDATE_CHECK_KEY);
             const now = Date.now();
-
             if (!manual && lastCheck && (now - parseInt(lastCheck)) < UPDATE_CHECK_INTERVAL) {
                 console.log('[NovaCore] Skipping update check (checked recently)');
                 return;
             }
-
             console.log('[NovaCore] Checking for updates...');
-
             try {
                 const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, {
                     cache: 'no-cache'
                 });
-
-                if (!response.ok) {
-                    throw new Error('Failed to fetch update');
-                }
-
+                if (!response.ok) throw new Error('Failed to fetch update');
                 const scriptContent = await response.text();
                 const versionMatch = scriptContent.match(/@version\s+(\d+\.\d+)/);
-
                 if (versionMatch) {
                     const latestVersion = versionMatch[1];
                     state.latestVersion = latestVersion;
-
                     localStorage.setItem(LAST_UPDATE_CHECK_KEY, now.toString());
-
                     const comparison = compareVersions(latestVersion, SCRIPT_VERSION);
-
                     if (comparison > 0) {
                         console.log(`[NovaCore] Update available: v${latestVersion}`);
                         state.updateAvailable = true;
                         showUpdateNotification(latestVersion);
-
-                        // Update the GUI button
                         if (cachedElements.checkUpdateBtn) {
                             cachedElements.checkUpdateBtn.textContent = '🎉 Update Available!';
                             cachedElements.checkUpdateBtn.classList.add('update-now-btn');
@@ -401,7 +481,6 @@
                                 window.open(`https://github.com/${GITHUB_REPO}/blob/main/NCUserscript.js`, '_blank');
                             };
                         }
-
                         if (manual && cachedElements.updateStatus) {
                             cachedElements.updateStatus.textContent = `✨ v${latestVersion} available!`;
                             cachedElements.updateStatus.style.color = '#2ecc71';
@@ -439,567 +518,306 @@
     }
 
     @keyframes slideDownInTop {
-        0% {
-            opacity: 0;
-            transform: translate(-50%, -70px);
-        }
-        60% {
-            opacity: 1;
-            transform: translate(-50%, 5px);
-        }
-        100% {
-            opacity: 1;
-            transform: translate(-50%, 0);
-        }
+        0% { opacity: 0; transform: translate(-50%, -70px); }
+        60% { opacity: 1; transform: translate(-50%, 5px); }
+        100% { opacity: 1; transform: translate(-50%, 0); }
     }
 
     @keyframes slideUpOutTop {
-        0% {
-            opacity: 1;
-            transform: translate(-50%, 0);
-        }
-        100% {
-            opacity: 0;
-            transform: translate(-50%, -100px) scale(0.9);
-        }
+        0% { opacity: 1; transform: translate(-50%, 0); }
+        100% { opacity: 0; transform: translate(-50%, -100px) scale(0.9); }
     }
 
     @keyframes checkPopIn {
-        0% {
-            opacity: 0;
-            transform: scale(0) rotate(-45deg);
-        }
-        50% {
-            opacity: 1;
-            transform: scale(1.4) rotate(10deg);
-        }
-        75% {
-            transform: scale(0.9) rotate(-5deg);
-        }
-        100% {
-            opacity: 1;
-            transform: scale(1) rotate(0deg);
-        }
+        0% { opacity: 0; transform: scale(0) rotate(-45deg); }
+        50% { opacity: 1; transform: scale(1.4) rotate(10deg); }
+        75% { transform: scale(0.9) rotate(-5deg); }
+        100% { opacity: 1; transform: scale(1) rotate(0deg); }
     }
 
     @keyframes fadeScaleIn {
-        0% {
-            opacity: 0;
-            transform: scale(0.5);
-        }
-        50% {
-            opacity: 0.8;
-            transform: scale(1.05);
-        }
-        100% {
-            opacity: 1;
-            transform: scale(1);
-        }
+        0% { opacity: 0; transform: scale(0.5); }
+        50% { opacity: 0.8; transform: scale(1.05); }
+        100% { opacity: 1; transform: scale(1); }
     }
 
     @keyframes strokeDashoffsetAnim {
-        0% {
-            stroke-dashoffset: 1000;
-            opacity: 0;
-        }
-        20% {
-            opacity: 1;
-        }
-        100% {
-            stroke-dashoffset: 0;
-            opacity: 1;
-        }
+        0% { stroke-dashoffset: 1000; opacity: 0; }
+        20% { opacity: 1; }
+        100% { stroke-dashoffset: 0; opacity: 1; }
     }
 
     @keyframes checkmarkFadeScale {
-        0% {
-            opacity: 0;
-            transform: scale(0) rotate(-180deg);
-        }
-        60% {
-            opacity: 1;
-            transform: scale(1.3) rotate(10deg);
-        }
-        80% {
-            transform: scale(0.9) rotate(-5deg);
-        }
-        100% {
-            opacity: 1;
-            transform: scale(1) rotate(0deg);
-        }
+        0% { opacity: 0; transform: scale(0) rotate(-180deg); }
+        60% { opacity: 1; transform: scale(1.3) rotate(10deg); }
+        80% { transform: scale(0.9) rotate(-5deg); }
+        100% { opacity: 1; transform: scale(1) rotate(0deg); }
     }
 
     @keyframes fadeOut {
-        0% {
-            opacity: 1;
-            transform: scale(1);
-        }
-        100% {
-            opacity: 0;
-            transform: scale(0.95);
-        }
+        0% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(0.95); }
     }
 
     @keyframes glowPulse {
-        0%, 100% {
-            text-shadow:
-                0 0 8px var(--nova-shadow),
-                0 0 20px var(--nova-shadow),
-                0 0 30px var(--nova-shadow);
-        }
-        50% {
-            text-shadow:
-                0 0 12px var(--nova-shadow),
-                0 0 30px var(--nova-shadow),
-                0 0 50px var(--nova-shadow),
-                0 0 70px var(--nova-shadow);
-        }
+        0%, 100% { text-shadow: 0 0 8px var(--nova-shadow), 0 0 20px var(--nova-shadow), 0 0 30px var(--nova-shadow); }
+        50% { text-shadow: 0 0 12px var(--nova-shadow), 0 0 30px var(--nova-shadow), 0 0 50px var(--nova-shadow), 0 0 70px var(--nova-shadow); }
     }
 
     @keyframes counterSlideIn {
-        from {
-            opacity: 0;
-            transform: translateX(-30px);
-        }
-        to {
-            opacity: 1;
-            transform: translateX(0);
-        }
+        from { opacity: 0; transform: translateX(-30px); }
+        to { opacity: 1; transform: translateX(0); }
     }
 
     @keyframes menuItemHover {
-        0% {
-            transform: translateY(0);
-        }
-        50% {
-            transform: translateY(-4px);
-        }
-        100% {
-            transform: translateY(-2px);
-        }
+        0% { transform: translateY(0); }
+        50% { transform: translateY(-4px); }
+        100% { transform: translateY(-2px); }
     }
 
     @keyframes ripple {
-        0% {
-            transform: translate(-50%, -50%) scale(0);
-            opacity: 1;
-        }
-        100% {
-            transform: translate(-50%, -50%) scale(4);
-            opacity: 0;
-        }
+        0% { transform: translate(-50%, -50%) scale(0); opacity: 1; }
+        100% { transform: translate(-50%, -50%) scale(4); opacity: 0; }
+    }
+
+    @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(400px); }
+        to { opacity: 1; transform: translateX(0); }
+    }
+
+    @keyframes pulse {
+        0%, 100% { box-shadow: 0 0 10px rgba(46, 204, 113, 0.5); }
+        50% { box-shadow: 0 0 20px rgba(46, 204, 113, 0.8); }
     }
 
     #nova-intro {
-        position: fixed;
-        inset: 0;
-        background: black;
-        z-index: 999999;
-        user-select: none;
-        overflow: hidden;
+        position: fixed; inset: 0; background: black; z-index: 999999;
+        user-select: none; overflow: hidden;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     .downloaded-btn {
-        position: fixed;
-        top: 10vh;
-        left: 50%;
-        transform: translateX(-50%);
-        background: #111;
-        border: 2px solid #e53935;
-        color: white;
-        padding: 12px 40px;
-        border-radius: 30px;
-        font-size: 1.3rem;
-        display: inline-flex;
-        align-items: center;
-        gap: 12px;
+        position: fixed; top: 10vh; left: 50%; transform: translateX(-50%);
+        background: #111; border: 2px solid #e53935; color: white;
+        padding: 12px 40px; border-radius: 30px; font-size: 1.3rem;
+        display: inline-flex; align-items: center; gap: 12px;
         box-shadow: 0 0 12px rgba(229, 57, 53, 0.7);
         animation: slideDownInTop 0.8s ease forwards;
-        white-space: nowrap;
-        user-select: none;
-        z-index: 1000001;
+        white-space: nowrap; user-select: none; z-index: 1000001;
     }
 
     .checkmark {
-        color: #e53935;
-        font-size: 1.4rem;
-        opacity: 0;
-        transform: scale(0);
+        color: #e53935; font-size: 1.4rem; opacity: 0; transform: scale(0);
         animation-fill-mode: forwards;
         animation-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);
     }
 
     .client-name-container {
-        position: fixed;
-        bottom: 10vh;
-        left: 50%;
-        transform: translateX(-50%);
-        display: flex;
-        align-items: center;
-        gap: 20px;
-        opacity: 0;
-        animation-fill-mode: forwards;
-        animation-timing-function: ease-out;
-        user-select: none;
-        z-index: 1000000;
+        position: fixed; bottom: 10vh; left: 50%; transform: translateX(-50%);
+        display: flex; align-items: center; gap: 20px; opacity: 0;
+        animation-fill-mode: forwards; animation-timing-function: ease-out;
+        user-select: none; z-index: 1000000;
     }
 
-    .client-name-svg {
-        width: 400px;
-        height: 100px;
-    }
+    .client-name-svg { width: 400px; height: 100px; }
 
     svg text {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
-        font-size: 72px;
-        fill: white;
-        stroke: #ff1744;
-        stroke-width: 2px;
-        stroke-linejoin: round;
-        stroke-linecap: round;
-        stroke-dasharray: 1000;
-        stroke-dashoffset: 1000;
-        animation: strokeDashoffsetAnim 2.5s forwards ease;
-        user-select: none;
+        font-weight: 700; font-size: 72px; fill: white; stroke: #ff1744;
+        stroke-width: 2px; stroke-linejoin: round; stroke-linecap: round;
+        stroke-dasharray: 1000; stroke-dashoffset: 1000;
+        animation: strokeDashoffsetAnim 2.5s forwards ease; user-select: none;
     }
 
     .client-name-checkmark {
-        font-size: 4.2rem;
-        color: #ff1744;
-        opacity: 0;
-        transform: scale(0);
-        animation-fill-mode: forwards;
-        animation-timing-function: ease-out;
+        font-size: 4.2rem; color: #ff1744; opacity: 0; transform: scale(0);
+        animation-fill-mode: forwards; animation-timing-function: ease-out;
         user-select: none;
     }
 
     #nova-persistent-header {
-        position: fixed;
-        top: 10px;
-        left: 10px;
-        transform: none;
+        position: fixed; top: 10px; left: 10px; transform: none;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 900;
-        font-size: 1.5rem;
-        color: var(--nova-primary);
-        text-shadow:
-            0 0 8px var(--nova-shadow),
-            0 0 20px var(--nova-shadow),
-            0 0 30px var(--nova-shadow),
-            0 0 40px var(--nova-shadow),
-            0 0 50px var(--nova-shadow);
-        user-select: none;
-        z-index: 100000000;
-        pointer-events: none;
-        white-space: nowrap;
-        opacity: 0;
+        font-weight: 900; font-size: 1.5rem; color: var(--nova-primary);
+        text-shadow: 0 0 8px var(--nova-shadow), 0 0 20px var(--nova-shadow),
+                     0 0 30px var(--nova-shadow), 0 0 40px var(--nova-shadow),
+                     0 0 50px var(--nova-shadow);
+        user-select: none; z-index: 100000000; pointer-events: none;
+        white-space: nowrap; opacity: 0;
         transition: opacity 0.5s ease, color 0.3s ease, text-shadow 0.3s ease;
         animation: glowPulse 3s ease-in-out infinite;
     }
 
-    #nova-persistent-header.visible {
-        opacity: 1;
-    }
+    #nova-persistent-header.visible { opacity: 1; }
 
     #nova-menu-overlay {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.85);
-        backdrop-filter: blur(10px);
-        z-index: 10000000;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: flex-start;
-        padding-top: 40px;
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.35s ease;
-        user-select: none;
+        position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(10px); z-index: 10000000;
+        display: flex; flex-direction: column; align-items: center;
+        justify-content: flex-start; padding-top: 40px; opacity: 0;
+        pointer-events: none; transition: opacity 0.35s ease; user-select: none;
     }
 
-    #nova-menu-overlay.show {
-        opacity: 1;
-        pointer-events: auto;
-    }
+    #nova-menu-overlay.show { opacity: 1; pointer-events: auto; }
 
     #nova-menu-header {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-size: 3rem;
-        font-weight: 900;
-        color: var(--nova-primary);
-        text-shadow:
-            0 0 8px var(--nova-shadow),
-            0 0 20px var(--nova-shadow),
-            0 0 30px var(--nova-shadow),
-            0 0 40px var(--nova-shadow),
-            0 0 50px var(--nova-shadow);
-        user-select: none;
-        margin-bottom: 30px;
+        font-size: 3rem; font-weight: 900; color: var(--nova-primary);
+        text-shadow: 0 0 8px var(--nova-shadow), 0 0 20px var(--nova-shadow),
+                     0 0 30px var(--nova-shadow), 0 0 40px var(--nova-shadow),
+                     0 0 50px var(--nova-shadow);
+        user-select: none; margin-bottom: 30px;
         transition: color 0.3s ease, text-shadow 0.3s ease;
     }
 
     #nova-menu-content {
-        width: 320px;
-        background: #111a;
-        border-radius: 16px;
-        padding: 24px;
-        color: white;
-        font-size: 1.1rem;
-        box-shadow:
-            0 0 10px rgba(var(--nova-primary-rgb), 0.5),
-            inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
-        user-select: none;
-        display: flex;
-        flex-direction: column;
-        gap: 24px;
-        max-height: 80vh;
-        overflow-y: auto;
+        width: 320px; background: #111a; border-radius: 16px; padding: 24px;
+        color: white; font-size: 1.1rem;
+        box-shadow: 0 0 10px rgba(var(--nova-primary-rgb), 0.5),
+                    inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
+        user-select: none; display: flex; flex-direction: column; gap: 24px;
+        max-height: 80vh; overflow-y: auto;
         transition: box-shadow 0.3s ease;
     }
 
     .nova-menu-btn {
-        background: #000000cc;
-        border: 2px solid var(--nova-primary);
+        background: #000000cc; border: 2px solid var(--nova-primary);
         color: var(--nova-primary);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
-        font-size: 1rem;
-        padding: 16px 20px;
-        margin-bottom: 4px;
-        border-radius: 10px;
-        cursor: pointer;
+        font-weight: 700; font-size: 1rem; padding: 16px 20px;
+        margin-bottom: 4px; border-radius: 10px; cursor: pointer;
         transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-        user-select: none;
-        text-align: center;
-        position: relative;
-        overflow: hidden;
+        user-select: none; text-align: center; position: relative; overflow: hidden;
     }
 
     .nova-menu-btn::before {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 0;
-        border-radius: 50%;
+        content: ''; position: absolute; top: 50%; left: 50%;
+        width: 0; height: 0; border-radius: 50%;
         background: rgba(var(--nova-primary-rgb), 0.3);
-        transform: translate(-50%, -50%);
-        transition: width 0.6s ease, height 0.6s ease;
+        transform: translate(-50%, -50%); transition: width 0.6s ease, height 0.6s ease;
     }
 
     .nova-menu-btn::after {
-        content: '';
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: 0;
-        height: 0;
-        border-radius: 50%;
+        content: ''; position: absolute; top: 50%; left: 50%;
+        width: 0; height: 0; border-radius: 50%;
         background: rgba(var(--nova-primary-rgb), 0.5);
-        transform: translate(-50%, -50%);
-        pointer-events: none;
+        transform: translate(-50%, -50%); pointer-events: none;
     }
 
-    .nova-menu-btn:active::before {
-        width: 300px;
-        height: 300px;
-    }
-
-    .nova-menu-btn:active::after {
-        animation: ripple 0.6s ease-out;
-    }
+    .nova-menu-btn:active::before { width: 300px; height: 300px; }
+    .nova-menu-btn:active::after { animation: ripple 0.6s ease-out; }
 
     .nova-menu-btn:hover {
-        background: var(--nova-primary);
-        color: #000;
+        background: var(--nova-primary); color: #000;
         transform: translateY(-2px) scale(1.02);
-        box-shadow:
-            0 4px 12px rgba(var(--nova-primary-rgb), 0.4),
-            0 8px 24px rgba(var(--nova-primary-rgb), 0.2);
+        box-shadow: 0 4px 12px rgba(var(--nova-primary-rgb), 0.4),
+                    0 8px 24px rgba(var(--nova-primary-rgb), 0.2);
         animation: menuItemHover 0.3s ease forwards;
     }
 
     #nova-hint-text {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        font-family: 'Press Start 2P', cursive;
-        color: var(--nova-primary);
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        font-family: 'Press Start 2P', cursive; color: var(--nova-primary);
         font-size: 1.25rem;
-        text-shadow:
-            0 0 4px var(--nova-shadow),
-            0 0 10px var(--nova-shadow),
-            0 0 14px var(--nova-shadow);
-        user-select: none;
-        opacity: 0;
-        pointer-events: none;
+        text-shadow: 0 0 4px var(--nova-shadow), 0 0 10px var(--nova-shadow),
+                     0 0 14px var(--nova-shadow);
+        user-select: none; opacity: 0; pointer-events: none;
         transition: opacity 0.8s ease, color 0.3s ease, text-shadow 0.3s ease;
-        z-index: 9999999;
-        white-space: nowrap;
+        z-index: 9999999; white-space: nowrap;
     }
 
     .counter {
-        position: fixed;
-        background: rgba(var(--nova-primary-rgb), 0.85);
-        color: #000;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
-        font-size: 1.25rem;
-        padding: 8px 14px;
+        position: fixed; background: rgba(var(--nova-primary-rgb), 0.85);
+        color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-weight: 700; font-size: 1.25rem; padding: 8px 14px;
         border-radius: 12px;
-        box-shadow:
-            0 0 8px rgba(var(--nova-primary-rgb), 0.7),
-            inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
-        user-select: none;
-        cursor: grab;
-        z-index: 999999999;
-        width: max-content;
-        max-width: 160px;
-        text-align: center;
+        box-shadow: 0 0 8px rgba(var(--nova-primary-rgb), 0.7),
+                    inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
+        user-select: none; cursor: grab; z-index: 999999999;
+        width: max-content; max-width: 160px; text-align: center;
         transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
                     background 0.3s ease, box-shadow 0.3s ease;
-        will-change: transform;
-        animation: counterSlideIn 0.5s ease-out;
+        will-change: transform; animation: counterSlideIn 0.5s ease-out;
     }
 
     .counter.dragging {
-        cursor: grabbing;
-        opacity: 0.85;
-        user-select: none;
-        transform: scale(1.05);
-        box-shadow:
-            0 0 16px rgba(var(--nova-primary-rgb), 0.9),
-            inset 0 0 12px rgba(var(--nova-primary-rgb), 0.5);
+        cursor: grabbing; opacity: 0.85; user-select: none; transform: scale(1.05);
+        box-shadow: 0 0 16px rgba(var(--nova-primary-rgb), 0.9),
+                    inset 0 0 12px rgba(var(--nova-primary-rgb), 0.5);
     }
 
     .counter:hover:not(.dragging) {
         transform: scale(1.02);
-        box-shadow:
-            0 0 12px rgba(var(--nova-primary-rgb), 0.85),
-            inset 0 0 10px rgba(var(--nova-primary-rgb), 0.4);
+        box-shadow: 0 0 12px rgba(var(--nova-primary-rgb), 0.85),
+                    inset 0 0 10px rgba(var(--nova-primary-rgb), 0.4);
     }
 
     #real-time-counter {
-        position: fixed;
-        bottom: 10px;
-        right: 10px;
-        background: rgba(var(--nova-primary-rgb), 0.85);
-        color: #000;
+        position: fixed; bottom: 10px; right: 10px;
+        background: rgba(var(--nova-primary-rgb), 0.85); color: #000;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
-        font-size: 22px;
-        padding: 8px 14px;
+        font-weight: 700; font-size: 22px; padding: 8px 14px;
         border-radius: 12px;
-        box-shadow:
-            0 0 8px rgba(var(--nova-primary-rgb), 0.7),
-            inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
-        cursor: default;
-        user-select: none;
-        z-index: 999999999;
-        width: 180px;
-        text-align: center;
-        pointer-events: auto;
+        box-shadow: 0 0 8px rgba(var(--nova-primary-rgb), 0.7),
+                    inset 0 0 8px rgba(var(--nova-primary-rgb), 0.3);
+        cursor: default; user-select: none; z-index: 999999999;
+        width: 180px; text-align: center; pointer-events: auto;
         transition: background 0.3s ease, box-shadow 0.3s ease;
     }
 
     #real-time-counter .counter-time-text {
-        font-variant-numeric: tabular-nums;
-        display: inline-block;
-        min-width: 150px;
+        font-variant-numeric: tabular-nums; display: inline-block; min-width: 150px;
     }
 
     .counter-tooltip {
-        position: absolute;
-        bottom: calc(100% + 8px);
-        right: 0;
-        background: black;
-        color: white;
-        padding: 6px 10px;
-        border-radius: 6px;
-        font-size: 12px;
-        white-space: nowrap;
-        box-shadow: 0 0 6px rgba(0,0,0,0.8);
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.25s ease;
-        z-index: 1000000000;
+        position: absolute; bottom: calc(100% + 8px); right: 0;
+        background: black; color: white; padding: 6px 10px;
+        border-radius: 6px; font-size: 12px; white-space: nowrap;
+        box-shadow: 0 0 6px rgba(0,0,0,0.8); opacity: 0;
+        pointer-events: none; transition: opacity 0.25s ease; z-index: 1000000000;
     }
 
-    .counter:hover .counter-tooltip {
-        opacity: 1;
-    }
+    .counter:hover .counter-tooltip { opacity: 1; }
 
     .settings-section {
         border-top: 1px solid rgba(var(--nova-primary-rgb), 0.3);
-        padding-top: 24px;
-        margin-top: 16px;
+        padding-top: 24px; margin-top: 16px;
         transition: border-color 0.3s ease;
     }
 
     .settings-label {
-        font-size: 0.9rem;
-        color: var(--nova-primary);
-        margin-bottom: 10px;
-        display: block;
-        transition: color 0.3s ease;
+        font-size: 0.9rem; color: var(--nova-primary);
+        margin-bottom: 10px; display: block; transition: color 0.3s ease;
     }
 
     .keybind-input {
-        width: 100%;
-        background: #000000cc;
-        border: 2px solid var(--nova-primary);
-        color: var(--nova-primary);
+        width: 100%; background: #000000cc;
+        border: 2px solid var(--nova-primary); color: var(--nova-primary);
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 700;
-        font-size: 1rem;
-        padding: 8px 12px;
-        border-radius: 8px;
-        text-align: center;
-        transition: all 0.3s ease;
+        font-weight: 700; font-size: 1rem; padding: 8px 12px;
+        border-radius: 8px; text-align: center; transition: all 0.3s ease;
     }
 
     .keybind-input:focus {
-        outline: none;
-        box-shadow: 0 0 12px rgba(var(--nova-primary-rgb), 0.6);
+        outline: none; box-shadow: 0 0 12px rgba(var(--nova-primary-rgb), 0.6);
         background: rgba(var(--nova-primary-rgb), 0.15);
     }
 
     .theme-grid {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-        margin-top: 12px;
+        display: grid; grid-template-columns: repeat(2, 1fr);
+        gap: 12px; margin-top: 12px;
     }
 
     .theme-btn {
-        background: #000000cc;
-        border: 2px solid;
+        background: #000000cc; border: 2px solid;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        font-weight: 600;
-        font-size: 0.85rem;
-        padding: 12px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: all 0.3s ease;
-        user-select: none;
-        text-align: center;
-        position: relative;
+        font-weight: 600; font-size: 0.85rem; padding: 12px;
+        border-radius: 8px; cursor: pointer; transition: all 0.3s ease;
+        user-select: none; text-align: center; position: relative;
     }
 
-    .theme-btn:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    }
-
-    .theme-btn.active {
-        box-shadow: 0 0 15px currentColor, inset 0 0 10px currentColor;
-        font-weight: 900;
-    }
+    .theme-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3); }
+    .theme-btn.active { box-shadow: 0 0 15px currentColor, inset 0 0 10px currentColor; font-weight: 900; }
 
     .theme-btn.cyan { border-color: #00ffff; color: #00ffff; }
     .theme-btn.purple { border-color: #9b59b6; color: #9b59b6; }
@@ -1009,105 +827,88 @@
     .theme-btn.gold { border-color: #f39c12; color: #f39c12; }
     .theme-btn.pink { border-color: #ff69b4; color: #ff69b4; }
     .theme-btn.orange { border-color: #ff6b35; color: #ff6b35; }
+    .theme-btn.custom { border-color: var(--nova-primary); color: var(--nova-primary); }
 
-    .update-notification {
-        position: fixed;
-        top: 80px;
-        right: 20px;
-        background: rgba(0, 0, 0, 0.95);
-        border: 2px solid var(--nova-primary);
-        border-radius: 12px;
-        padding: 16px 20px;
-        color: white;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        box-shadow: 0 0 20px rgba(var(--nova-primary-rgb), 0.6);
-        z-index: 100000001;
-        max-width: 320px;
-        animation: slideInRight 0.5s ease;
-        user-select: none;
+    .color-picker-wrapper { margin-top: 12px; }
+
+    .color-picker-input {
+        width: 100%; height: 50px; border: 2px solid var(--nova-primary);
+        border-radius: 8px; cursor: pointer; background: #000000cc;
+        transition: all 0.3s ease;
     }
 
-    @keyframes slideInRight {
-        from {
-            opacity: 0;
-            transform: translateX(400px);
-        }
-        to {
-            opacity: 1;
-            transform: translateX(0);
-        }
+    .color-picker-input:hover {
+        box-shadow: 0 0 12px rgba(var(--nova-primary-rgb), 0.6);
+        transform: scale(1.02);
+    }
+
+    .credits-section {
+        text-align: center; font-size: 0.85rem; color: #999;
+        padding: 16px 0; border-top: 1px solid rgba(var(--nova-primary-rgb), 0.2);
+        margin-top: 16px;
+    }
+
+    .credits-section strong { color: var(--nova-primary); font-weight: 700; }
+    .credits-section a {
+        color: var(--nova-primary); text-decoration: none;
+        transition: opacity 0.3s ease;
+    }
+    .credits-section a:hover { opacity: 0.8; text-decoration: underline; }
+
+    .debug-console-btn {
+        background: #000000cc !important; border: 2px solid #e74c3c !important;
+        color: #e74c3c !important;
+    }
+
+    .debug-console-btn:hover { background: #e74c3c !important; color: white !important; }
+
+    .update-notification {
+        position: fixed; top: 80px; right: 20px;
+        background: rgba(0, 0, 0, 0.95); border: 2px solid var(--nova-primary);
+        border-radius: 12px; padding: 16px 20px; color: white;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        box-shadow: 0 0 20px rgba(var(--nova-primary-rgb), 0.6);
+        z-index: 100000001; max-width: 320px;
+        animation: slideInRight 0.5s ease; user-select: none;
     }
 
     .update-notification-header {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        margin-bottom: 12px;
-        font-size: 1.1rem;
-        font-weight: 700;
-        color: var(--nova-primary);
+        display: flex; align-items: center; gap: 10px;
+        margin-bottom: 12px; font-size: 1.1rem;
+        font-weight: 700; color: var(--nova-primary);
     }
 
     .update-notification-body {
-        font-size: 0.95rem;
-        line-height: 1.5;
-        margin-bottom: 14px;
-        color: #ddd;
+        font-size: 0.95rem; line-height: 1.5;
+        margin-bottom: 14px; color: #ddd;
     }
 
-    .update-notification-version {
-        color: var(--nova-primary);
-        font-weight: 700;
-    }
-
-    .update-notification-buttons {
-        display: flex;
-        gap: 10px;
-    }
+    .update-notification-version { color: var(--nova-primary); font-weight: 700; }
+    .update-notification-buttons { display: flex; gap: 10px; }
 
     .update-notification-btn {
-        flex: 1;
-        background: #000;
-        border: 2px solid var(--nova-primary);
-        color: var(--nova-primary);
-        padding: 10px;
-        border-radius: 8px;
-        font-weight: 700;
-        cursor: pointer;
-        transition: all 0.3s ease;
+        flex: 1; background: #000; border: 2px solid var(--nova-primary);
+        color: var(--nova-primary); padding: 10px; border-radius: 8px;
+        font-weight: 700; cursor: pointer; transition: all 0.3s ease;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
 
     .update-notification-btn:hover {
-        background: var(--nova-primary);
-        color: #000;
-        transform: translateY(-2px);
+        background: var(--nova-primary); color: #000; transform: translateY(-2px);
     }
 
-    .update-notification-btn.dismiss {
-        border-color: #666;
-        color: #999;
-    }
-
-    .update-notification-btn.dismiss:hover {
-        background: #666;
-        color: white;
-    }
+    .update-notification-btn.dismiss { border-color: #666; color: #999; }
+    .update-notification-btn.dismiss:hover { background: #666; color: white; }
 
     .update-check-status {
-        font-size: 0.85rem;
-        color: #999;
-        text-align: center;
-        margin-top: 8px;
-        font-style: italic;
+        font-size: 0.85rem; color: #999; text-align: center;
+        margin-top: 8px; font-style: italic;
     }
 
     .update-now-btn {
         background: linear-gradient(135deg, #2ecc71, #27ae60) !important;
-        border: 2px solid #2ecc71 !important;
-        color: white !important;
-        animation: pulse 2s infinite;
-        font-weight: 900 !important;
+        border: 2px solid #2ecc71 !important; color: white !important;
+        animation: pulse 2s infinite; font-weight: 900 !important;
     }
 
     .update-now-btn:hover {
@@ -1116,40 +917,13 @@
         box-shadow: 0 4px 20px rgba(46, 204, 113, 0.6) !important;
     }
 
-    @keyframes pulse {
-        0%, 100% {
-            box-shadow: 0 0 10px rgba(46, 204, 113, 0.5);
-        }
-        50% {
-            box-shadow: 0 0 20px rgba(46, 204, 113, 0.8);
-        }
-    }
-
     @media (max-width: 768px) {
-        #nova-persistent-header {
-            font-size: 1.8rem;
-        }
-
-        #nova-menu-header {
-            font-size: 2rem;
-        }
-
-        #nova-menu-content {
-            width: 90%;
-            max-width: 320px;
-        }
-
-        #nova-hint-text {
-            font-size: 0.9rem;
-        }
-
-        .counter {
-            font-size: 1rem;
-        }
-
-        .theme-grid {
-            grid-template-columns: 1fr;
-        }
+        #nova-persistent-header { font-size: 1.8rem; }
+        #nova-menu-header { font-size: 2rem; }
+        #nova-menu-content { width: 90%; max-width: 320px; }
+        #nova-hint-text { font-size: 0.9rem; }
+        .counter { font-size: 1rem; }
+        .theme-grid { grid-template-columns: 1fr; }
     }
     `;
     document.head.appendChild(style);
@@ -1157,36 +931,33 @@
     // ===== UNIFIED PERFORMANCE LOOP =====
     function startPerformanceLoop() {
         if (state.performanceLoopRunning) return;
-
         state.performanceLoopRunning = true;
         let lastFpsUpdate = performance.now();
         let frameCount = 0;
 
         function loop(currentTime) {
-            // Only run if the loop should still be active
             if (!state.performanceLoopRunning) {
                 state.rafId = null;
                 return;
             }
 
-            // FPS tracking
             if (state.fpsShown && state.counters.fps) {
                 frameCount++;
                 const elapsed = currentTime - lastFpsUpdate;
-
                 if (elapsed >= TIMING.FPS_UPDATE_INTERVAL) {
                     const fps = Math.round((frameCount * 1000) / elapsed);
                     if (state.counters.fps?.firstChild) {
                         state.counters.fps.firstChild.nodeValue = `FPS: ${fps}`;
                     }
+                    if (fps > state.sessionStats.peakFPS) {
+                        state.sessionStats.peakFPS = fps;
+                    }
                     frameCount = 0;
                     lastFpsUpdate = currentTime;
                 }
             }
-
             state.rafId = requestAnimationFrame(loop);
         }
-
         state.rafId = requestAnimationFrame(loop);
     }
 
@@ -1353,18 +1124,14 @@
     function stopFPSCounter() {
         safeExecute(() => {
             state.fpsShown = false;
-
             if (state.cleanupFunctions.fps) {
                 state.cleanupFunctions.fps();
                 state.cleanupFunctions.fps = null;
             }
-
             if (state.counters.fps) {
                 state.counters.fps.remove();
                 state.counters.fps = null;
             }
-
-            // Stop performance loop if no counters need it
             if (!state.fpsShown) {
                 stopPerformanceLoop();
             }
@@ -1391,18 +1158,20 @@
 
             const dragCleanup = setupDragging(counter, 'cps');
 
-            // Create new listener reference
             cpsClickListenerRef = (e) => {
                 if (e.button === 0) {
                     const now = performance.now();
                     state.cpsClicks.push(now);
+                    state.sessionStats.totalClicks++;
 
-                    // Remove old clicks efficiently
                     const cutoff = now - TIMING.CPS_WINDOW;
                     while (state.cpsClicks.length > 0 && state.cpsClicks[0] < cutoff) {
                         state.cpsClicks.shift();
                     }
 
+                    if (state.cpsClicks.length > state.sessionStats.peakCPS) {
+                        state.sessionStats.peakCPS = state.cpsClicks.length;
+                    }
                     updateCPSCounter();
                 }
             };
@@ -1449,17 +1218,14 @@
                 state.cleanupFunctions.cps();
                 state.cleanupFunctions.cps = null;
             }
-
             if (state.counters.cps) {
                 state.counters.cps.remove();
                 state.counters.cps = null;
             }
-
             if (state.intervals.cps) {
                 clearInterval(state.intervals.cps);
                 state.intervals.cps = null;
             }
-
             state.cpsClicks = [];
         }, null, 'stopCPSCounter');
     }
@@ -1489,7 +1255,6 @@
     function updateRealTime() {
         safeExecute(() => {
             if (!state.counters.realTime) return;
-
             const now = new Date();
             let hours = now.getHours();
             const minutes = now.getMinutes().toString().padStart(2, '0');
@@ -1534,7 +1299,6 @@
 
             if (!savedSessionId || savedSessionId !== currentSessionId) {
                 sessionStorage.setItem(SESSION_ID_KEY, currentSessionId);
-
                 const now = Date.now();
                 localStorage.setItem(SESSION_START_KEY, now.toString());
                 return now;
@@ -1601,7 +1365,6 @@
 
             document.body.appendChild(counter);
             state.counters.sessionTimer = counter;
-
             state.cleanupFunctions.sessionTimer = setupDragging(counter, 'sessionTimer');
             return counter;
         }, null, 'createSessionTimerCounter');
@@ -1610,7 +1373,6 @@
     function updateSessionTimer() {
         safeExecute(() => {
             if (!state.counters.sessionTimer) return;
-
             const elapsed = Date.now() - state.sessionStartTime;
             const timeText = state.counters.sessionTimer.querySelector('.counter-time-text');
             if (timeText) {
@@ -1622,10 +1384,8 @@
     function startSessionTimer() {
         safeExecute(() => {
             if (!state.counters.sessionTimer) createSessionTimerCounter();
-
             state.sessionStartTime = getSessionStartTime();
             updateSessionTimer();
-
             state.intervals.sessionTimer = setInterval(updateSessionTimer, 1000);
         }, null, 'startSessionTimer');
     }
@@ -1636,12 +1396,10 @@
                 state.cleanupFunctions.sessionTimer();
                 state.cleanupFunctions.sessionTimer = null;
             }
-
             if (state.counters.sessionTimer) {
                 state.counters.sessionTimer.remove();
                 state.counters.sessionTimer = null;
             }
-
             if (state.intervals.sessionTimer) {
                 clearInterval(state.intervals.sessionTimer);
                 state.intervals.sessionTimer = null;
@@ -1669,7 +1427,6 @@
 
             document.body.appendChild(counter);
             state.counters.antiAfk = counter;
-
             state.cleanupFunctions.antiAfk = setupDragging(counter, 'antiAfk');
             return counter;
         }, null, 'createAntiAfkCounter');
@@ -1677,18 +1434,10 @@
 
     function pressSpace() {
         const down = new KeyboardEvent("keydown", {
-            key: " ",
-            code: "Space",
-            keyCode: 32,
-            which: 32,
-            bubbles: true,
+            key: " ", code: "Space", keyCode: 32, which: 32, bubbles: true,
         });
         const up = new KeyboardEvent("keyup", {
-            key: " ",
-            code: "Space",
-            keyCode: 32,
-            which: 32,
-            bubbles: true,
+            key: " ", code: "Space", keyCode: 32, which: 32, bubbles: true,
         });
         window.dispatchEvent(down);
         setTimeout(() => window.dispatchEvent(up), 50);
@@ -1697,7 +1446,6 @@
     function updateAntiAfkCounter() {
         safeExecute(() => {
             if (!state.counters.antiAfk) return;
-
             const timeText = state.counters.antiAfk.querySelector('.counter-time-text');
             if (timeText) {
                 timeText.textContent = `⚡ Jumping in ${state.antiAfkCountdown}s`;
@@ -1708,14 +1456,12 @@
     function startAntiAfk() {
         safeExecute(() => {
             if (!state.counters.antiAfk) createAntiAfkCounter();
-
             state.antiAfkCountdown = 5;
             updateAntiAfkCounter();
 
             state.intervals.antiAfk = setInterval(() => {
                 state.antiAfkCountdown--;
                 updateAntiAfkCounter();
-
                 if (state.antiAfkCountdown <= 0) {
                     pressSpace();
                     state.antiAfkCountdown = 5;
@@ -1730,17 +1476,14 @@
                 state.cleanupFunctions.antiAfk();
                 state.cleanupFunctions.antiAfk = null;
             }
-
             if (state.counters.antiAfk) {
                 state.counters.antiAfk.remove();
                 state.counters.antiAfk = null;
             }
-
             if (state.intervals.antiAfk) {
                 clearInterval(state.intervals.antiAfk);
                 state.intervals.antiAfk = null;
             }
-
             state.antiAfkCountdown = 5;
         }, null, 'stopAntiAfk');
     }
@@ -1844,7 +1587,6 @@
             fullscreenBtn.textContent = 'Auto Fullscreen';
             fullscreenBtn.addEventListener('click', () => {
                 const elem = document.documentElement;
-
                 if (!document.fullscreenElement) {
                     elem.requestFullscreen().catch(err => {
                         alert(`Error trying to enable fullscreen: ${err.message}`);
@@ -1889,6 +1631,38 @@
             themeSection.appendChild(themeGrid);
             menuContent.appendChild(themeSection);
 
+            // Custom Color Picker
+            const colorPickerSection = document.createElement('div');
+            colorPickerSection.className = 'settings-section';
+
+            const colorPickerLabel = document.createElement('label');
+            colorPickerLabel.className = 'settings-label';
+            colorPickerLabel.textContent = 'Custom Theme Color:';
+            colorPickerSection.appendChild(colorPickerLabel);
+
+            const colorPickerWrapper = document.createElement('div');
+            colorPickerWrapper.className = 'color-picker-wrapper';
+
+            const colorInput = document.createElement('input');
+            colorInput.type = 'color';
+            colorInput.className = 'color-picker-input';
+            colorInput.value = THEMES.custom.primary;
+
+            colorInput.addEventListener('change', (e) => {
+                const color = e.target.value;
+                localStorage.setItem(CUSTOM_COLOR_KEY, color);
+                THEMES.custom.primary = color;
+                THEMES.custom.primaryRgb = hexToRgb(color);
+                THEMES.custom.shadow = color;
+                applyTheme('custom');
+                document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+                document.querySelector('.theme-btn.custom')?.classList.add('active');
+            });
+
+            colorPickerWrapper.appendChild(colorInput);
+            colorPickerSection.appendChild(colorPickerWrapper);
+            menuContent.appendChild(colorPickerSection);
+
             // Keybind section
             const settingsSection = document.createElement('div');
             settingsSection.className = 'settings-section';
@@ -1912,7 +1686,6 @@
                     keybindInput.blur();
                     return;
                 }
-
                 state.menuKey = e.key;
                 keybindInput.value = e.key;
                 if (cachedElements.hint) {
@@ -1958,6 +1731,68 @@
             cachedElements.updateStatus = updateStatus;
 
             menuContent.appendChild(updateSection);
+
+            // Session Stats Section
+            const statsSection = document.createElement('div');
+            statsSection.className = 'settings-section';
+
+            const statsLabel = document.createElement('label');
+            statsLabel.className = 'settings-label';
+            statsLabel.textContent = 'Session Statistics:';
+            statsSection.appendChild(statsLabel);
+
+            const statsBtn = document.createElement('button');
+            statsBtn.className = 'nova-menu-btn';
+            statsBtn.textContent = '📊 View Session Stats';
+            statsBtn.addEventListener('click', showSessionStats);
+            statsSection.appendChild(statsBtn);
+
+            menuContent.appendChild(statsSection);
+
+            // Debug Console Section
+            const debugSection = document.createElement('div');
+            debugSection.className = 'settings-section';
+
+            const debugLabel = document.createElement('label');
+            debugLabel.className = 'settings-label';
+            debugLabel.textContent = 'Debug Tools:';
+            debugSection.appendChild(debugLabel);
+
+            const debugBtn = document.createElement('button');
+            debugBtn.className = 'nova-menu-btn debug-console-btn';
+            debugBtn.textContent = '🐛 View Debug Log';
+            debugBtn.addEventListener('click', () => {
+                if (state.debugLog.length === 0) {
+                    alert('No debug entries logged this session.');
+                    return;
+                }
+                console.group('[NovaCore Debug Log]');
+                console.table(state.debugLog);
+                console.groupEnd();
+                alert(`Debug log exported to console (${state.debugLog.length} entries).\nPress F12 to view.`);
+            });
+            debugSection.appendChild(debugBtn);
+
+            menuContent.appendChild(debugSection);
+
+            // Credits Section
+            const creditsSection = document.createElement('div');
+            creditsSection.className = 'settings-section credits-section';
+
+            creditsSection.innerHTML = `
+                <div style="margin-bottom: 8px;">
+                    <strong>NovaCore v${SCRIPT_VERSION}</strong>
+                </div>
+                <div style="margin: 4px 0;">Original by <strong>@Scripter132132</strong></div>
+                <div style="margin: 4px 0;">Enhanced by <strong>@TheM1ddleM1n</strong></div>
+                <div style="margin-top: 12px; font-size: 0.75rem;">
+                    <a href="https://github.com/${GITHUB_REPO}" target="_blank">
+                        ⭐ View on GitHub
+                    </a>
+                </div>
+            `;
+
+            menuContent.appendChild(creditsSection);
 
             menuOverlay.appendChild(menuContent);
             document.body.appendChild(menuOverlay);
@@ -2057,7 +1892,6 @@
                 if (cachedElements.fpsBtn) {
                     cachedElements.fpsBtn.textContent = 'Hide FPS Counter';
                 }
-
                 if (settings.positions?.fps && state.counters.fps) {
                     state.counters.fps.style.left = settings.positions.fps.left;
                     state.counters.fps.style.top = settings.positions.fps.top;
@@ -2070,7 +1904,6 @@
                 if (cachedElements.cpsBtn) {
                     cachedElements.cpsBtn.textContent = 'Hide CPS Counter';
                 }
-
                 if (settings.positions?.cps && state.counters.cps) {
                     state.counters.cps.style.left = settings.positions.cps.left;
                     state.counters.cps.style.top = settings.positions.cps.top;
@@ -2091,7 +1924,6 @@
                 if (cachedElements.sessionTimerBtn) {
                     cachedElements.sessionTimerBtn.textContent = 'Hide Session Timer';
                 }
-
                 if (settings.positions?.sessionTimer && state.counters.sessionTimer) {
                     state.counters.sessionTimer.style.left = settings.positions.sessionTimer.left;
                     state.counters.sessionTimer.style.top = settings.positions.sessionTimer.top;
@@ -2104,7 +1936,6 @@
                 if (cachedElements.antiAfkBtn) {
                     cachedElements.antiAfkBtn.textContent = 'Disable Anti-AFK';
                 }
-
                 if (settings.positions?.antiAfk && state.counters.antiAfk) {
                     state.counters.antiAfk.style.left = settings.positions.antiAfk.left;
                     state.counters.antiAfk.style.top = settings.positions.antiAfk.top;
@@ -2117,7 +1948,7 @@
     function globalCleanup() {
         safeExecute(() => {
             console.log('[NovaCore] Cleaning up resources...');
-
+            saveSessionStats();
             stopFPSCounter();
             stopCPSCounter();
             stopRealTimeCounter();
@@ -2137,17 +1968,25 @@
             });
 
             stopPerformanceLoop();
-
             console.log('[NovaCore] Cleanup complete');
         }, null, 'globalCleanup');
     }
 
     window.addEventListener('beforeunload', globalCleanup);
 
+    // Auto-save session stats every 30 seconds
+    setInterval(() => {
+        saveSessionStats();
+    }, 30000);
+
     // ===== INITIALIZATION =====
     function init() {
         safeExecute(() => {
             console.log(`[NovaCore] Initializing version ${SCRIPT_VERSION}...`);
+
+            loadCustomTheme();
+            loadDebugLog();
+            initSessionStats();
 
             const intro = createIntro();
             const header = createPersistentHeader();
@@ -2171,7 +2010,6 @@
                     restoreSavedState();
                     console.log('[NovaCore] Initialization complete');
 
-                    // Check for updates after initialization
                     setTimeout(() => checkForUpdates(false), 2000);
                 }, TIMING.INTRO_FADE_OUT);
             }, TIMING.INTRO_TOTAL_DURATION);
