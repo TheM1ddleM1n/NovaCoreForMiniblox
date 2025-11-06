@@ -45,10 +45,10 @@ NovaCore V2.8 is a powerful, modular Tampermonkey userscript that enhances your 
 ### Quality of Life
 
 - **🎨 Theme System** - Choose from 8 pre-built themes or create your own custom color scheme
-- **⚡ Anti-AFK** - Automatically jumps every 5 seconds to prevent kick
+- **⚡ Anti-AFK** - Automatically jumps every 5 seconds to prevent kick (idea from Unverified Client V2 thx wytlines100 and devs!)
 - **🖱️ Draggable Counters** - Reposition any counter anywhere on screen
-- **⌨️ Customizable Keybind** - Set your preferred menu toggle key (default: `\`)
-- **🔔 Update Notifications** - Automatic GitHub update checking
+- **⌨️ Customizable Keybind** - Set your preferred menu toggle key (default keybind: `\`)
+- **🔔 Update Notifications** - Automatic GitHub update checking (idea from me)
 
 ### Advanced Features
 
@@ -113,7 +113,7 @@ NovaCore V2.8 is a powerful, modular Tampermonkey userscript that enhances your 
    - Press F12 to view the formatted console output
    - Stats include: session count, total clicks/keys, peak CPS/FPS
 
-4. **Debug Issues**
+4. **Debug Issues** (I think I will remove this)
    - Click "🐛 View Debug Log" to export error logs
    - Share logs when reporting issues on GitHub
 
@@ -122,7 +122,7 @@ NovaCore V2.8 is a powerful, modular Tampermonkey userscript that enhances your 
 - 💡 **Right-click Session Timer** to reset it
 - 💡 **Counters auto-save positions** when you drag them
 - 💡 **Theme changes apply instantly** - no reload needed
-- 💡 **Anti-AFK countdown** shows seconds until next jump
+- 💡 **Anti-AFK countdown** shows how many seconds until the next jump
 - 💡 **Update checker runs automatically** every hour
 
 ---
@@ -254,14 +254,13 @@ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
 
 ### Development Team
 
-- **Original Creator:** [@Scripter132132](https://github.com/Scripter132132) - NovaCore V1 foundation
-- **Lead Developer:** [@TheM1ddleM1n](https://github.com/TheM1ddleM1n) - V2+ enhancements and maintenance
+- **Original Creator:** [@Scripter132132](https://github.com/Scripter132132) - NovaCore V1 foundation!
+- **Lead Dev:** [@TheM1ddleM1n](https://github.com/TheM1ddleM1n) - V2+ enhancements and maintenance!
 
-### Special Thanks
+### Special Thanks!
 
-- The Miniblox community for feedback and bug reports
-- All contributors who submitted issues and pull requests
-- Tampermonkey team for the excellent userscript platform
+- The Tampermonkey team for the excellent userscript platform!
+- and @Scripter132132!
 
 ---
 
