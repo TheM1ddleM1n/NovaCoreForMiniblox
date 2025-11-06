@@ -1,91 +1,292 @@
-# NovaCore-For-Miniblox
+# NovaCore V2.8 Enhanced - Premium Miniblox Userscript 💎
 
-NovaCore is a lightweight, modular Tampermonkey userscript (using JavaScript) framework for [Miniblox](https://miniblox.io)!  
-This repository contains improvements, quality-of-life enhancements, and new features built on top of the original NovaCore V1 by @Scripter132132. The goal is to provide a modular, easy-to-configure userscript that scripters can extend and reuse.
+<div align="center">
 
-## TL;DR
+![Version](https://img.shields.io/badge/version-2.8-00ffff?style=for-the-badge)
+![License](https://img.shields.io/badge/license-MIT-00ffff?style=for-the-badge)
+![Platform](https://img.shields.io/badge/platform-Tampermonkey-00ffff?style=for-the-badge)
 
-- Type: Tampermonkey userscript (using JavaScript)
-- Purpose: Clean, modular foundation for Miniblox scripting!
-- Credit: Original V1 by @Scripter132132 — extended and maintained by @TheM1ddleM1n
+**A feature-rich, high-performance userscript framework for [Miniblox](https://miniblox.io)**
 
-## Requirements
+[Features](#-features) • [Installation](#-installation) • [Usage](#-usage) • [Contributing](#-contributing)
 
-- Browser with a userscript manager (Tampermonkey is recommended).
-- Miniblox (or the target site/environment the script is designed to modify).
+</div>
 
-## Installation (FOR TAMPERMONKEY)
+---
 
-1. Install Tampermonkey (Chrome/Edge/Firefox/Opera) — https://www.tampermonkey.net/
-2. Install the script:
-   - Option A: Open Tampermonkey dashboard → Add new script → copy/paste the script contents → Save.
-3. Configure the script (see Configuration below) then enable it in the Tampermonkey dashboard.
+## 🎯 Overview
 
-## Userscript header (example)
+NovaCore V2.8 is a powerful, modular Tampermonkey userscript that enhances your Miniblox experience with real-time performance monitoring, customizable themes, and quality-of-life improvements. Built on the foundation of NovaCore V1 by @Scripter132132, this enhanced version features significant performance optimizations, memory management improvements, and a sleek modern UI.
 
-Make sure the actual script is a appropriate metadata block. An example is:
-```js
-// ==UserScript==
-// @name         NovaCore V2 Enhanced
-// @namespace    vector fr fr
-// @version      2.1
-// @description  NovaCore V2 but improved!
+### ✨ Key Highlights
+
+- 🚀 **Optimized Performance** - Unified RAF loop, throttled updates, efficient memory management
+- 🎨 **8 Stunning Themes** - Cyan, Purple, Green, Red, Blue, Gold, Pink, Orange + Custom colors
+- 📊 **Real-Time Monitoring** - FPS, CPS, Session Timer, Real-Time Clock
+- ⚡ **Anti-AFK System** - Automatic jump prevention to avoid kicks
+- 💾 **Smart Persistence** - Settings auto-save with position memory
+- 🐛 **Debug Console** - Built-in error tracking and logging system
+- 🔄 **Auto-Update Checker** - Stay notified of new releases
+- 📈 **Session Statistics** - Track clicks, keys, peak performance across sessions
+
+---
+
+## 🎮 Features
+
+### Performance Counters
+
+| Feature | Description | Keyboard Shortcut |
+|---------|-------------|-------------------|
+| **FPS Counter** | Real-time frames per second display | Toggle via menu |
+| **CPS Counter** | Clicks per second tracker | Toggle via menu |
+| **Real-Time Clock** | Never exit fullscreen to check time | Toggle via menu |
+| **Session Timer** | Track your playtime (right-click to reset) | Toggle via menu |
+
+### Quality of Life
+
+- **🎨 Theme System** - Choose from 8 pre-built themes or create your own custom color scheme
+- **⚡ Anti-AFK** - Automatically jumps every 5 seconds to prevent kick
+- **🖱️ Draggable Counters** - Reposition any counter anywhere on screen
+- **⌨️ Customizable Keybind** - Set your preferred menu toggle key (default: `\`)
+- **🔔 Update Notifications** - Automatic GitHub update checking
+
+### Advanced Features
+
+- **Session Statistics Dashboard** - View total clicks, keys pressed, peak CPS/FPS, and session count
+- **Debug Console** - Export detailed error logs for troubleshooting
+- **Memory-Efficient Design** - Debounced saves, throttled updates, cleanup on exit
+- **Responsive UI** - Works perfectly on desktop and mobile devices
+- **Fullscreen Support** - Optimized for fullscreen gaming experience
+
+---
+
+## 📦 Installation
+
+### Prerequisites
+
+- A modern web browser (Chrome, Firefox, Edge, Opera)
+- [Tampermonkey](https://www.tampermonkey.net/) extension installed
+
+### Quick Install
+
+1. **Install Tampermonkey**
+   - Chrome/Edge: [Chrome Web Store](https://chrome.google.com/webstore/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)
+   - Firefox: [Firefox Add-ons](https://addons.mozilla.org/en-US/firefox/addon/tampermonkey/)
+   - Opera: [Opera Add-ons](https://addons.opera.com/en/extensions/details/tampermonkey-beta/)
+
+2. **Install NovaCore Script**
+   - Click [here](https://github.com/TheM1ddleM1n/NovaCoreForMiniblox/blob/main/NCUserscript.js) to view the script
+   - Click the **Raw** button to view raw code
+   - Tampermonkey should prompt you to install - click **Install**
+   
+   *Alternatively:* Copy the script code → Open Tampermonkey Dashboard → Create New Script → Paste → Save
+
+3. **Visit Miniblox**
+   - Navigate to [miniblox.io](https://miniblox.io)
+   - Watch the installation animation
+   - Press `\` to open the menu!
+
+---
+
+## 🎯 Usage
+
+### Opening the Menu
+
+- **Default Keybind:** Press `\` (backslash)
+- **Custom Keybind:** Change in Settings → Menu Keybind
+- **Close Menu:** Press `ESC` or click outside the menu
+
+### Customizing Your Experience
+
+1. **Choose a Theme**
+   - Open menu → Scroll to Theme section
+   - Click any theme button to apply instantly
+   - Or use the color picker for custom colors
+
+2. **Enable Counters**
+   - Toggle any counter from the menu
+   - Drag counters to reposition them
+   - Positions are automatically saved
+
+3. **View Statistics**
+   - Click "📊 View Session Stats" in the menu
+   - Press F12 to view the formatted console output
+   - Stats include: session count, total clicks/keys, peak CPS/FPS
+
+4. **Debug Issues**
+   - Click "🐛 View Debug Log" to export error logs
+   - Share logs when reporting issues on GitHub
+
+### Tips & Tricks
+
+- 💡 **Right-click Session Timer** to reset it
+- 💡 **Counters auto-save positions** when you drag them
+- 💡 **Theme changes apply instantly** - no reload needed
+- 💡 **Anti-AFK countdown** shows seconds until next jump
+- 💡 **Update checker runs automatically** every hour
+
+---
+
+## 🛠️ Configuration
+
+### Script Metadata
+
+```javascript
+// @name         NovaCore V2.8 Enhanced
+// @namespace    http://github.com/TheM1ddleM1n/
+// @version      2.8
+// @description  NovaCore V2 with improved performance, memory management, and themes!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
 // @grant        none
-// ==/UserScript==
 ```
 
-## Usage
+### Available Themes
 
-- Install the userscript in Tampermonkey and visit the target site which is Miniblox.io (see @match).
-- Open the Tampermonkey dashboard to edit configuration or to enable/disable the script.
+| Theme | Primary Color | Use Case |
+|-------|---------------|----------|
+| Cyan (Default) | `#00ffff` | Classic NovaCore aesthetic |
+| Purple Dream | `#9b59b6` | Elegant and mysterious |
+| Matrix Green | `#2ecc71` | Hacker vibes |
+| Crimson Fire | `#e74c3c` | Bold and aggressive |
+| Ocean Blue | `#3498db` | Cool and calming |
+| Golden Glow | `#f39c12` | Warm and premium |
+| Bubblegum Pink | `#ff69b4` | Fun and playful |
+| Sunset Orange | `#ff6b35` | Energetic and vibrant |
+| Custom | Your choice | Fully customizable |
 
-## Contributing
+### Storage Keys
 
-Contributions are welcome. Please:
-1. Fork the repository.
-2. Create a feature branch (e.g., feat/new-module).
-3. Add or update modules and tests/examples where appropriate.
-4. Open a pull request describing changes and why they help.
+NovaCore uses localStorage for persistence:
+- `novacore_settings` - Feature toggles and positions
+- `novacore_session_stats` - Session statistics
+- `novacore_custom_color` - Custom theme color
+- `novacore_debug_log` - Error and debug logs
 
-## License & Credits
+---
 
-- Original NovaCore V1 by @Scripter132132 — thank you for the foundation!
-- Current improvements and maintenance: @TheM1ddleM1n
-- Suggested license: MIT (add a LICENSE file to the repo to clarify terms).
+## 🤝 Contributing
 
-## Contact & Support
+We welcome contributions! Here's how you can help:
 
-- Open an issue on this repository for bugs, feature requests, or help: https://github.com/TheM1ddleM1n/NovaCoreForMiniblox/issues
-- Maintainer: https://github.com/TheM1ddleM1n
+### Reporting Issues
 
-Thank you for using NovaCore — contributions and feedback are much appreciated!
+1. Check existing [issues](https://github.com/TheM1ddleM1n/NovaCoreForMiniblox/issues)
+2. Create a new issue with:
+   - Clear description of the bug/feature
+   - Steps to reproduce (for bugs)
+   - Browser and Tampermonkey version
+   - Debug log if applicable
 
-[Screen recording 2025-10-25 14.59.40.webm](https://github.com/user-attachments/assets/820584c7-74bc-4007-b741-3287bdffb8a6)
+### Pull Requests
 
-## Step by Step (if this video is low quality) 
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feat/amazing-feature`
+3. **Commit** your changes: `git commit -m 'Add amazing feature'`
+4. **Push** to the branch: `git push origin feat/amazing-feature`
+5. **Open** a Pull Request with:
+   - Clear description of changes
+   - Testing steps performed
+   - Screenshots/videos if UI changes
 
-Step 1: search miniblox on github
+### Development Guidelines
 
-Step 2: go to recently updated 
+- Follow existing code style and structure
+- Use `safeExecute()` wrapper for error handling
+- Add comments for complex logic
+- Test thoroughly before submitting
+- Update version number and changelog
 
-Step 3: click on NovaCoreForMiniblox
+---
 
-Step 4: go to `NCUserscript.js`
+## 📋 Changelog
 
-Step 5: Copy this using the shortcut `ctrl c` (or whatever you use to copy)
+### v2.8 (Current)
+- ✨ Added session statistics dashboard
+- 🐛 Improved debug logging system
+- 🎨 Enhanced theme system with custom color picker
+- ⚡ Performance optimizations and memory management
+- 🔄 Automatic update checker
+- 📱 Mobile responsiveness improvements
 
-Step 6: Make sure tampermonkey is installed
+### v2.0-2.7
+- Major performance improvements
+- Theme system implementation
+- Anti-AFK feature
+- Session timer and real-time clock
+- Draggable counters with position memory
+- Debounced save system
 
-Step 7: Paste this into tampermonkey using the shortcut `ctrl v` (or whatever you use to paste)
+### v1.0 (Original by @Scripter132132)
+- Basic FPS/CPS counters
+- Simple menu system
+- Core functionality
 
-Step 8: You should see this save!
+---
 
-Step 9: Reload OR open miniblox.io
+## 📜 License
 
-Step 10: you should see a animation screen to say it has been installed 
+This project is licensed under the MIT License - see below for details:
 
-Step 11: press \\ to access the GUI!!
+```
+MIT License
 
-Step 12: Enjoy!
+Copyright (c) 2025
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+```
+
+---
+
+## 👥 Credits
+
+### Development Team
+
+- **Original Creator:** [@Scripter132132](https://github.com/Scripter132132) - NovaCore V1 foundation
+- **Lead Developer:** [@TheM1ddleM1n](https://github.com/TheM1ddleM1n) - V2+ enhancements and maintenance
+
+### Special Thanks
+
+- The Miniblox community for feedback and bug reports
+- All contributors who submitted issues and pull requests
+- Tampermonkey team for the excellent userscript platform
+
+---
+
+## 📞 Support & Contact
+
+- **Issues & Bugs:** [GitHub Issues](https://github.com/TheM1ddleM1n/NovaCoreForMiniblox/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/TheM1ddleM1n/NovaCoreForMiniblox/discussions)
+- **Repository:** [NovaCoreForMiniblox](https://github.com/TheM1ddleM1n/NovaCoreForMiniblox)
+
+---
+
+## ⭐ Show Your Support
+
+If you find NovaCore useful, please consider:
+- ⭐ Starring the repository
+- 🐛 Reporting bugs and suggesting features
+- 🤝 Contributing code improvements
+- 📢 Sharing with the Miniblox community
+
+---
+
+<div align="center">
+
+**Made with 💎 for the Miniblox community**
+
+[⬆ Back to Top](#novacore-v28-enhanced---premium-miniblox-userscript-)
+
+</div>
