@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         NovaCore V2.8 Enhanced
+// @name         NovaCore V2.9 Enhanced
 // @namespace    http://github.com/TheM1ddleM1n/
-// @version      2.8
+// @version      2.9
 // @description  NovaCore V2 with improved performance, memory management, code quality, themes, and session stats!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
@@ -23,7 +23,8 @@
         FPS_UPDATE_INTERVAL: 1000,
         CPS_UPDATE_INTERVAL: 100,
         CPS_WINDOW: 1000,
-        SAVE_DEBOUNCE: 500
+        SAVE_DEBOUNCE: 500,
+        STATS_UPDATE_INTERVAL: 1000
     };
 
     const THEMES = {
@@ -90,11 +91,40 @@
     const SESSION_STATS_KEY = 'novacore_session_stats';
     const SESSION_COUNT_KEY = 'novacore_session_count';
     const CUSTOM_COLOR_KEY = 'novacore_custom_color';
-    const SCRIPT_VERSION = '2.8';
+    const SCRIPT_VERSION = '2.9';
     const GITHUB_REPO = 'TheM1ddleM1n/NovaCoreForMiniblox';
     const LAST_UPDATE_CHECK_KEY = 'novacore_last_update_check';
     const UPDATE_CHECK_INTERVAL = 3600000;
-    const DEBUG_LOG_KEY = 'novacore_debug_log';
+
+    // ===== CIRCUIT BREAKER FOR ERROR RECOVERY =====
+    const circuitBreaker = {
+        failures: new Map(),
+        threshold: 3,
+        resetTime: 60000,
+
+        record(context) {
+            const count = (this.failures.get(context) || 0) + 1;
+            this.failures.set(context, count);
+
+            if (count >= this.threshold) {
+                console.warn(`[NovaCore] Circuit breaker triggered for ${context}`);
+                showErrorNotification(`${context} disabled due to repeated errors`);
+
+                setTimeout(() => {
+                    this.failures.delete(context);
+                    console.log(`[NovaCore] Circuit breaker reset for ${context}`);
+                }, this.resetTime);
+
+                return true;
+            }
+
+            return false;
+        },
+
+        isOpen(context) {
+            return (this.failures.get(context) || 0) >= this.threshold;
+        }
+    };
 
     // ===== STATE MANAGEMENT WITH PROXY =====
     const stateData = {
@@ -117,7 +147,8 @@
             cps: null,
             realTime: null,
             sessionTimer: null,
-            antiAfk: null
+            antiAfk: null,
+            statsUpdate: null
         },
         drag: {
             fps: { active: false, offsetX: 0, offsetY: 0 },
@@ -133,19 +164,27 @@
             fps: null,
             cps: null,
             realTime: null,
-            sessionTimer: null
+            sessionTimer: null,
+            antiAfk: null
         },
         updateAvailable: false,
         latestVersion: null,
         antiAfkCountdown: 5,
         performanceLoopRunning: false,
-        debugLog: [],
+        activeRAFFeatures: new Set(),
+        eventListeners: new Map(),
         sessionStats: {
             totalClicks: 0,
             totalKeys: 0,
             peakCPS: 0,
             peakFPS: 0,
-            sessionCount: 0
+            sessionCount: 0,
+            startTime: null,
+            clicksBySecond: [],
+            fpsHistory: [],
+            averageFPS: 0,
+            averageCPS: 0,
+            totalSessionTime: 0
         }
     };
 
@@ -153,39 +192,6 @@
     let cpsClickListenerRef = null;
 
     // ===== UTILITY FUNCTIONS =====
-    function logDebugEntry(context, error, severity = 'error') {
-        const entry = {
-            timestamp: new Date().toISOString(),
-            context,
-            message: error.message || error,
-            stack: error.stack || '',
-            severity
-        };
-
-        stateData.debugLog.push(entry);
-
-        if (stateData.debugLog.length > 100) {
-            stateData.debugLog.shift();
-        }
-
-        try {
-            localStorage.setItem(DEBUG_LOG_KEY, JSON.stringify(stateData.debugLog.slice(-50)));
-        } catch (e) {
-            console.warn('[NovaCore] Failed to save debug log:', e);
-        }
-    }
-
-    function loadDebugLog() {
-        try {
-            const saved = localStorage.getItem(DEBUG_LOG_KEY);
-            if (saved) {
-                stateData.debugLog = JSON.parse(saved);
-            }
-        } catch (e) {
-            console.warn('[NovaCore] Failed to load debug log:', e);
-        }
-    }
-
     function showErrorNotification(message) {
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -206,10 +212,26 @@
             return fn();
         } catch (error) {
             console.error(`[NovaCore Error - ${context}]:`, error);
-            logDebugEntry(context, error, 'error');
+
+            if (circuitBreaker.record(context)) {
+                return fallbackValue;
+            }
 
             if (context.includes('Counter') || context.includes('Timer')) {
                 showErrorNotification(`Feature temporarily unavailable: ${context}`);
+
+                setTimeout(() => {
+                    if (!circuitBreaker.isOpen(context)) {
+                        console.log(`[NovaCore] Attempting to recover: ${context}`);
+                        if (context.includes('FPS') && state.fpsShown) {
+                            stopFPSCounter();
+                            setTimeout(() => startFPSCounter(), 1000);
+                        } else if (context.includes('CPS') && state.cpsShown) {
+                            stopCPSCounter();
+                            setTimeout(() => startCPSCounter(), 1000);
+                        }
+                    }
+                }, 3000);
             }
             return fallbackValue;
         }
@@ -323,6 +345,31 @@
         }
     });
 
+    // ===== MANAGED EVENT LISTENERS =====
+    function addManagedListener(element, event, handler, id) {
+        element.addEventListener(event, handler);
+
+        if (!state.eventListeners.has(id)) {
+            state.eventListeners.set(id, []);
+        }
+
+        state.eventListeners.get(id).push({
+            element,
+            event,
+            handler
+        });
+    }
+
+    function removeAllListeners(id) {
+        const listeners = state.eventListeners.get(id);
+        if (listeners) {
+            listeners.forEach(({ element, event, handler }) => {
+                element.removeEventListener(event, handler);
+            });
+            state.eventListeners.delete(id);
+        }
+    }
+
     // ===== THEME SYSTEM =====
     function hexToRgb(hex) {
         const rgb = parseInt(hex.slice(1), 16);
@@ -364,6 +411,7 @@
         safeExecute(() => {
             const sessionCount = parseInt(localStorage.getItem(SESSION_COUNT_KEY) || '0') + 1;
             state.sessionStats.sessionCount = sessionCount;
+            state.sessionStats.startTime = Date.now();
             localStorage.setItem(SESSION_COUNT_KEY, sessionCount.toString());
 
             const savedStats = localStorage.getItem(SESSION_STATS_KEY);
@@ -377,7 +425,29 @@
                 }
             }
             console.log(`[NovaCore] Session #${sessionCount} started`);
+
+            // Start periodic stats updates
+            state.intervals.statsUpdate = setInterval(updateStatsHistory, TIMING.STATS_UPDATE_INTERVAL);
         }, null, 'initSessionStats');
+    }
+
+    function updateStatsHistory() {
+        safeExecute(() => {
+            const now = Date.now();
+            const sessionTime = Math.floor((now - state.sessionStats.startTime) / 1000);
+
+            // Record current CPS (once per second)
+            if (sessionTime > state.sessionStats.clicksBySecond.length) {
+                state.sessionStats.clicksBySecond.push(state.cpsClicks.length);
+
+                // Calculate running average CPS
+                const sum = state.sessionStats.clicksBySecond.reduce((a, b) => a + b, 0);
+                state.sessionStats.averageCPS = (sum / state.sessionStats.clicksBySecond.length).toFixed(1);
+            }
+
+            // Update total session time
+            state.sessionStats.totalSessionTime = sessionTime;
+        }, null, 'updateStatsHistory');
     }
 
     function saveSessionStats() {
@@ -390,34 +460,56 @@
         const stats = state.sessionStats;
         const sessionTime = Date.now() - state.sessionStartTime;
         const sessionMinutes = Math.floor(sessionTime / 60000);
+        const sessionSeconds = Math.floor((sessionTime % 60000) / 1000);
 
         const message = `
-╔═══════════════════════════════════╗
-║      NovaCore Session Stats       ║
-╠═══════════════════════════════════╣
-║ Session #: ${stats.sessionCount.toString().padEnd(23)}║
-║ Session Time: ${sessionMinutes}m${' '.repeat(19 - sessionMinutes.toString().length)}║
-║ Total Clicks: ${stats.totalClicks.toLocaleString().padEnd(19)}║
-║ Total Keys: ${stats.totalKeys.toLocaleString().padEnd(21)}║
-║ Peak CPS: ${stats.peakCPS.toString().padEnd(25)}║
-║ Peak FPS: ${stats.peakFPS.toString().padEnd(25)}║
-╚═══════════════════════════════════╝
+╔════════════════════════════════════════╗
+║       NovaCore Session Statistics      ║
+╠════════════════════════════════════════╣
+║ Session #${stats.sessionCount.toString().padStart(32)}║
+║ Duration: ${sessionMinutes}m ${sessionSeconds}s${' '.repeat(26 - (sessionMinutes.toString() + sessionSeconds.toString()).length)}║
+╠════════════════════════════════════════╣
+║ 🖱️  CLICKS                             ║
+║   Total: ${stats.totalClicks.toLocaleString().padEnd(30)}║
+║   Peak CPS: ${stats.peakCPS.toString().padEnd(27)}║
+║   Average: ${stats.averageCPS.toString().padEnd(28)}║
+╠════════════════════════════════════════╣
+║ ⌨️  KEYBOARD                           ║
+║   Total Keys: ${stats.totalKeys.toLocaleString().padEnd(25)}║
+╠════════════════════════════════════════╣
+║ 🎮 PERFORMANCE                         ║
+║   Peak FPS: ${stats.peakFPS.toString().padEnd(27)}║
+║   Avg FPS: ${stats.averageFPS.toString().padEnd(28)}║
+╠════════════════════════════════════════╣
+║ 💡 Tip: Use Ctrl+S to save console    ║
+╚════════════════════════════════════════╝
         `;
 
         console.log(message);
-        alert('Session stats exported to console! Press F12 to view.');
+        console.log('Raw Session Data:', {
+            sessionId: stats.sessionCount,
+            duration: sessionTime,
+            stats: state.sessionStats
+        });
+
+        alert('Session stats exported to console! Press F12 to view and save.');
     }
 
     // ===== UPDATE CHECKER =====
     function compareVersions(v1, v2) {
-        const parts1 = v1.split('.').map(Number);
-        const parts2 = v2.split('.').map(Number);
-        for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
-            const part1 = parts1[i] || 0;
-            const part2 = parts2[i] || 0;
-            if (part1 > part2) return 1;
-            if (part1 < part2) return -1;
+        const parse = (v) => v.split('.').map(n => parseInt(n) || 0);
+        const parts1 = parse(v1);
+        const parts2 = parse(v2);
+
+        const maxLen = Math.max(parts1.length, parts2.length);
+        while (parts1.length < maxLen) parts1.push(0);
+        while (parts2.length < maxLen) parts2.push(0);
+
+        for (let i = 0; i < maxLen; i++) {
+            if (parts1[i] > parts2[i]) return 1;
+            if (parts1[i] < parts2[i]) return -1;
         }
+
         return 0;
     }
 
@@ -459,12 +551,19 @@
             }
             console.log('[NovaCore] Checking for updates...');
             try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000);
+
                 const response = await fetch(`https://raw.githubusercontent.com/${GITHUB_REPO}/main/NCUserscript.js`, {
-                    cache: 'no-cache'
+                    cache: 'no-cache',
+                    signal: controller.signal
                 });
-                if (!response.ok) throw new Error('Failed to fetch update');
+
+                clearTimeout(timeoutId);
+
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
                 const scriptContent = await response.text();
-                const versionMatch = scriptContent.match(/@version\s+(\d+\.\d+)/);
+                const versionMatch = scriptContent.match(/@version\s+([\d.]+)/);
                 if (versionMatch) {
                     const latestVersion = versionMatch[1];
                     state.latestVersion = latestVersion;
@@ -489,7 +588,7 @@
                         console.log('[NovaCore] You are on the latest version');
                         state.updateAvailable = false;
                         if (manual && cachedElements.updateStatus) {
-                            cachedElements.updateStatus.textContent = '✓ You are on the latest version!';
+                            cachedElements.updateStatus.textContent = '✓ Latest version installed!';
                             cachedElements.updateStatus.style.color = '#2ecc71';
                         }
                     }
@@ -497,10 +596,15 @@
                     throw new Error('Could not parse version');
                 }
             } catch (error) {
-                console.error('[NovaCore] Update check failed:', error);
-                if (manual && cachedElements.updateStatus) {
-                    cachedElements.updateStatus.textContent = '✗ Update check failed';
-                    cachedElements.updateStatus.style.color = '#e74c3c';
+                if (error.name === 'AbortError') {
+                    console.warn('[NovaCore] Update check timed out');
+                    if (manual) alert('Update check timed out. Please try again.');
+                } else {
+                    console.error('[NovaCore] Update check failed:', error);
+                    if (manual && cachedElements.updateStatus) {
+                        cachedElements.updateStatus.textContent = '✗ Check failed (offline?)';
+                        cachedElements.updateStatus.style.color = '#e74c3c';
+                    }
                 }
             }
         }, null, 'checkForUpdates');
@@ -855,13 +959,6 @@
     }
     .credits-section a:hover { opacity: 0.8; text-decoration: underline; }
 
-    .debug-console-btn {
-        background: #000000cc !important; border: 2px solid #e74c3c !important;
-        color: #e74c3c !important;
-    }
-
-    .debug-console-btn:hover { background: #e74c3c !important; color: white !important; }
-
     .update-notification {
         position: fixed; top: 80px; right: 20px;
         background: rgba(0, 0, 0, 0.95); border: 2px solid var(--nova-primary);
@@ -934,24 +1031,37 @@
         state.performanceLoopRunning = true;
         let lastFpsUpdate = performance.now();
         let frameCount = 0;
+        let fpsSum = 0;
+        let fpsCount = 0;
 
         function loop(currentTime) {
-            if (!state.performanceLoopRunning) {
+            if (!state.performanceLoopRunning || state.activeRAFFeatures.size === 0) {
+                state.performanceLoopRunning = false;
                 state.rafId = null;
                 return;
             }
 
-            if (state.fpsShown && state.counters.fps) {
+            if (state.activeRAFFeatures.has('fps') && state.counters.fps) {
                 frameCount++;
                 const elapsed = currentTime - lastFpsUpdate;
                 if (elapsed >= TIMING.FPS_UPDATE_INTERVAL) {
                     const fps = Math.round((frameCount * 1000) / elapsed);
-                    if (state.counters.fps?.firstChild) {
-                        state.counters.fps.firstChild.nodeValue = `FPS: ${fps}`;
-                    }
+
+                    requestIdleCallback(() => {
+                        if (state.counters.fps?.firstChild) {
+                            state.counters.fps.firstChild.nodeValue = `FPS: ${fps}`;
+                        }
+                    });
+
                     if (fps > state.sessionStats.peakFPS) {
                         state.sessionStats.peakFPS = fps;
                     }
+
+                    fpsSum += fps;
+                    fpsCount++;
+                    state.sessionStats.averageFPS = (fpsSum / fpsCount).toFixed(1);
+                    state.sessionStats.fpsHistory.push(fps);
+
                     frameCount = 0;
                     lastFpsUpdate = currentTime;
                 }
@@ -962,10 +1072,13 @@
     }
 
     function stopPerformanceLoop() {
-        state.performanceLoopRunning = false;
-        if (state.rafId) {
-            cancelAnimationFrame(state.rafId);
-            state.rafId = null;
+        state.activeRAFFeatures.delete('fps');
+        if (state.activeRAFFeatures.size === 0) {
+            state.performanceLoopRunning = false;
+            if (state.rafId) {
+                cancelAnimationFrame(state.rafId);
+                state.rafId = null;
+            }
         }
     }
 
@@ -1045,6 +1158,7 @@
     // ===== DRAGGING =====
     function setupDragging(element, counterType) {
         const dragState = state.drag[counterType];
+        const listenerId = `drag_${counterType}`;
 
         const onMouseDown = (e) => {
             dragState.active = true;
@@ -1064,32 +1178,23 @@
 
         const onMouseMove = throttle((e) => {
             if (dragState.active) {
-                let newX = e.clientX - dragState.offsetX;
-                let newY = e.clientY - dragState.offsetY;
-
-                const padding = 10;
-                const maxX = window.innerWidth - element.offsetWidth - padding;
-                const maxY = window.innerHeight - element.offsetHeight - padding;
-
-                newX = Math.min(maxX, Math.max(padding, newX));
-                newY = Math.min(maxY, Math.max(padding, newY));
+                const newX = Math.max(10, Math.min(window.innerWidth - element.offsetWidth - 10,
+                                   e.clientX - dragState.offsetX));
+                const newY = Math.max(10, Math.min(window.innerHeight - element.offsetHeight - 10,
+                                   e.clientY - dragState.offsetY));
 
                 requestAnimationFrame(() => {
-                    element.style.left = newX + 'px';
-                    element.style.top = newY + 'px';
+                    element.style.left = `${newX}px`;
+                    element.style.top = `${newY}px`;
                 });
             }
         }, 16);
 
-        element.addEventListener('mousedown', onMouseDown);
-        window.addEventListener('mouseup', onMouseUp);
-        window.addEventListener('mousemove', onMouseMove);
+        addManagedListener(element, 'mousedown', onMouseDown, listenerId);
+        addManagedListener(window, 'mouseup', onMouseUp, listenerId);
+        addManagedListener(window, 'mousemove', onMouseMove, listenerId);
 
-        return () => {
-            element.removeEventListener('mousedown', onMouseDown);
-            window.removeEventListener('mouseup', onMouseUp);
-            window.removeEventListener('mousemove', onMouseMove);
-        };
+        return () => removeAllListeners(listenerId);
     }
 
     // ===== FPS COUNTER =====
@@ -1117,7 +1222,10 @@
     function startFPSCounter() {
         safeExecute(() => {
             if (!state.counters.fps) createFPSCounter();
-            startPerformanceLoop();
+            state.activeRAFFeatures.add('fps');
+            if (!state.performanceLoopRunning) {
+                startPerformanceLoop();
+            }
         }, null, 'startFPSCounter');
     }
 
@@ -1132,9 +1240,7 @@
                 state.counters.fps.remove();
                 state.counters.fps = null;
             }
-            if (!state.fpsShown) {
-                stopPerformanceLoop();
-            }
+            stopPerformanceLoop();
         }, null, 'stopFPSCounter');
     }
 
@@ -1176,14 +1282,11 @@
                 }
             };
 
-            window.addEventListener('mousedown', cpsClickListenerRef);
+            addManagedListener(window, 'mousedown', cpsClickListenerRef, 'cps_clicks');
 
             state.cleanupFunctions.cps = () => {
                 dragCleanup();
-                if (cpsClickListenerRef) {
-                    window.removeEventListener('mousedown', cpsClickListenerRef);
-                    cpsClickListenerRef = null;
-                }
+                removeAllListeners('cps_clicks');
             };
 
             return counter;
@@ -1493,6 +1596,9 @@
         return safeExecute(() => {
             const menuOverlay = document.createElement('div');
             menuOverlay.id = 'nova-menu-overlay';
+            menuOverlay.setAttribute('role', 'dialog');
+            menuOverlay.setAttribute('aria-label', 'NovaCore Settings Menu');
+            menuOverlay.setAttribute('aria-modal', 'true');
 
             const menuHeader = document.createElement('div');
             menuHeader.id = 'nova-menu-header';
@@ -1502,10 +1608,19 @@
             const menuContent = document.createElement('div');
             menuContent.id = 'nova-menu-content';
 
-            const fpsBtn = document.createElement('button');
-            fpsBtn.className = 'nova-menu-btn';
-            fpsBtn.textContent = 'FPS Counter';
-            fpsBtn.addEventListener('click', () => {
+            const focusableElements = [];
+
+            const createButton = (text, onClick, ariaLabel) => {
+                const btn = document.createElement('button');
+                btn.className = 'nova-menu-btn';
+                btn.textContent = text;
+                btn.setAttribute('aria-label', ariaLabel || text);
+                btn.addEventListener('click', onClick);
+                focusableElements.push(btn);
+                return btn;
+            };
+
+            const fpsBtn = createButton('FPS Counter', () => {
                 if (state.fpsShown) {
                     state.fpsShown = false;
                     stopFPSCounter();
@@ -1515,13 +1630,10 @@
                     startFPSCounter();
                     fpsBtn.textContent = 'Hide FPS Counter';
                 }
-            });
+            }, 'Toggle FPS Counter');
             menuContent.appendChild(fpsBtn);
 
-            const cpsBtn = document.createElement('button');
-            cpsBtn.className = 'nova-menu-btn';
-            cpsBtn.textContent = 'CPS Counter';
-            cpsBtn.addEventListener('click', () => {
+            const cpsBtn = createButton('CPS Counter', () => {
                 if (state.cpsShown) {
                     stopCPSCounter();
                     cpsBtn.textContent = 'CPS Counter';
@@ -1531,13 +1643,10 @@
                     cpsBtn.textContent = 'Hide CPS Counter';
                     state.cpsShown = true;
                 }
-            });
+            }, 'Toggle CPS Counter');
             menuContent.appendChild(cpsBtn);
 
-            const realTimeBtn = document.createElement('button');
-            realTimeBtn.className = 'nova-menu-btn';
-            realTimeBtn.textContent = 'Real Time';
-            realTimeBtn.addEventListener('click', () => {
+            const realTimeBtn = createButton('Real Time', () => {
                 if (state.realTimeShown) {
                     stopRealTimeCounter();
                     realTimeBtn.textContent = 'Real Time';
@@ -1547,13 +1656,10 @@
                     realTimeBtn.textContent = 'Hide Real Time';
                     state.realTimeShown = true;
                 }
-            });
+            }, 'Toggle Real Time Clock');
             menuContent.appendChild(realTimeBtn);
 
-            const sessionTimerBtn = document.createElement('button');
-            sessionTimerBtn.className = 'nova-menu-btn';
-            sessionTimerBtn.textContent = 'Session Timer';
-            sessionTimerBtn.addEventListener('click', () => {
+            const sessionTimerBtn = createButton('Session Timer', () => {
                 if (state.sessionTimerShown) {
                     stopSessionTimer();
                     sessionTimerBtn.textContent = 'Session Timer';
@@ -1563,13 +1669,10 @@
                     sessionTimerBtn.textContent = 'Hide Session Timer';
                     state.sessionTimerShown = true;
                 }
-            });
+            }, 'Toggle Session Timer');
             menuContent.appendChild(sessionTimerBtn);
 
-            const antiAfkBtn = document.createElement('button');
-            antiAfkBtn.className = 'nova-menu-btn';
-            antiAfkBtn.textContent = 'Anti-AFK';
-            antiAfkBtn.addEventListener('click', () => {
+            const antiAfkBtn = createButton('Anti-AFK', () => {
                 if (state.antiAfkEnabled) {
                     stopAntiAfk();
                     antiAfkBtn.textContent = 'Anti-AFK';
@@ -1579,13 +1682,10 @@
                     antiAfkBtn.textContent = 'Disable Anti-AFK';
                     state.antiAfkEnabled = true;
                 }
-            });
+            }, 'Toggle Anti-AFK');
             menuContent.appendChild(antiAfkBtn);
 
-            const fullscreenBtn = document.createElement('button');
-            fullscreenBtn.className = 'nova-menu-btn';
-            fullscreenBtn.textContent = 'Auto Fullscreen';
-            fullscreenBtn.addEventListener('click', () => {
+            const fullscreenBtn = createButton('Auto Fullscreen', () => {
                 const elem = document.documentElement;
                 if (!document.fullscreenElement) {
                     elem.requestFullscreen().catch(err => {
@@ -1594,7 +1694,7 @@
                 } else {
                     document.exitFullscreen();
                 }
-            });
+            }, 'Toggle Fullscreen');
             menuContent.appendChild(fullscreenBtn);
 
             // Theme section
@@ -1614,6 +1714,7 @@
                 const themeBtn = document.createElement('button');
                 themeBtn.className = `theme-btn ${themeKey}`;
                 themeBtn.textContent = theme.name.replace(' (Default)', '');
+                themeBtn.setAttribute('aria-label', `Select ${theme.name} theme`);
 
                 if (state.currentTheme === themeKey) {
                     themeBtn.classList.add('active');
@@ -1625,6 +1726,7 @@
                     applyTheme(themeKey);
                 });
 
+                focusableElements.push(themeBtn);
                 themeGrid.appendChild(themeBtn);
             });
 
@@ -1647,6 +1749,7 @@
             colorInput.type = 'color';
             colorInput.className = 'color-picker-input';
             colorInput.value = THEMES.custom.primary;
+            colorInput.setAttribute('aria-label', 'Choose custom theme color');
 
             colorInput.addEventListener('change', (e) => {
                 const color = e.target.value;
@@ -1659,6 +1762,7 @@
                 document.querySelector('.theme-btn.custom')?.classList.add('active');
             });
 
+            focusableElements.push(colorInput);
             colorPickerWrapper.appendChild(colorInput);
             colorPickerSection.appendChild(colorPickerWrapper);
             menuContent.appendChild(colorPickerSection);
@@ -1678,6 +1782,7 @@
             keybindInput.value = state.menuKey;
             keybindInput.readOnly = true;
             keybindInput.placeholder = 'Press a key...';
+            keybindInput.setAttribute('aria-label', 'Menu keybind input');
 
             keybindInput.addEventListener('keydown', (e) => {
                 e.preventDefault();
@@ -1694,6 +1799,7 @@
                 keybindInput.blur();
             });
 
+            focusableElements.push(keybindInput);
             settingsSection.appendChild(keybindInput);
             menuContent.appendChild(settingsSection);
 
@@ -1706,10 +1812,7 @@
             updateLabel.textContent = 'Updates:';
             updateSection.appendChild(updateLabel);
 
-            const checkUpdateBtn = document.createElement('button');
-            checkUpdateBtn.className = 'nova-menu-btn';
-            checkUpdateBtn.textContent = 'Check for Updates';
-            checkUpdateBtn.addEventListener('click', () => {
+            const checkUpdateBtn = createButton('Check for Updates', () => {
                 checkUpdateBtn.textContent = 'Checking...';
                 checkUpdateBtn.disabled = true;
                 checkForUpdates(true).finally(() => {
@@ -1720,7 +1823,7 @@
                         checkUpdateBtn.disabled = false;
                     }, 2000);
                 });
-            });
+            }, 'Check for script updates');
             updateSection.appendChild(checkUpdateBtn);
             cachedElements.checkUpdateBtn = checkUpdateBtn;
 
@@ -1741,39 +1844,10 @@
             statsLabel.textContent = 'Session Statistics:';
             statsSection.appendChild(statsLabel);
 
-            const statsBtn = document.createElement('button');
-            statsBtn.className = 'nova-menu-btn';
-            statsBtn.textContent = '📊 View Session Stats';
-            statsBtn.addEventListener('click', showSessionStats);
+            const statsBtn = createButton('📊 View Session Stats', showSessionStats, 'View session statistics');
             statsSection.appendChild(statsBtn);
 
             menuContent.appendChild(statsSection);
-
-            // Debug Console Section
-            const debugSection = document.createElement('div');
-            debugSection.className = 'settings-section';
-
-            const debugLabel = document.createElement('label');
-            debugLabel.className = 'settings-label';
-            debugLabel.textContent = 'Debug Tools:';
-            debugSection.appendChild(debugLabel);
-
-            const debugBtn = document.createElement('button');
-            debugBtn.className = 'nova-menu-btn debug-console-btn';
-            debugBtn.textContent = '🐛 View Debug Log';
-            debugBtn.addEventListener('click', () => {
-                if (state.debugLog.length === 0) {
-                    alert('No debug entries logged this session.');
-                    return;
-                }
-                console.group('[NovaCore Debug Log]');
-                console.table(state.debugLog);
-                console.groupEnd();
-                alert(`Debug log exported to console (${state.debugLog.length} entries).\nPress F12 to view.`);
-            });
-            debugSection.appendChild(debugBtn);
-
-            menuContent.appendChild(debugSection);
 
             // Credits Section
             const creditsSection = document.createElement('div');
@@ -1797,6 +1871,18 @@
             menuOverlay.appendChild(menuContent);
             document.body.appendChild(menuOverlay);
 
+            // Keyboard navigation
+            menuOverlay.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const currentIndex = focusableElements.indexOf(document.activeElement);
+                    const nextIndex = e.shiftKey ?
+                        (currentIndex - 1 + focusableElements.length) % focusableElements.length :
+                        (currentIndex + 1) % focusableElements.length;
+                    focusableElements[nextIndex]?.focus();
+                }
+            });
+
             cachedElements.menu = menuOverlay;
             cachedElements.fpsBtn = fpsBtn;
             cachedElements.cpsBtn = cpsBtn;
@@ -1804,6 +1890,7 @@
             cachedElements.sessionTimerBtn = sessionTimerBtn;
             cachedElements.antiAfkBtn = antiAfkBtn;
             cachedElements.fullscreenBtn = fullscreenBtn;
+            cachedElements.focusableElements = focusableElements;
 
             menuOverlay.addEventListener('click', (e) => {
                 if (e.target === menuOverlay) {
@@ -1821,6 +1908,7 @@
             if (cachedElements.header) {
                 cachedElements.header.classList.remove('visible');
             }
+            setTimeout(() => cachedElements.focusableElements?.[0]?.focus(), 100);
         }
     }
 
@@ -1967,6 +2055,10 @@
                 if (cleanup) cleanup();
             });
 
+            state.eventListeners.forEach((listeners, id) => {
+                removeAllListeners(id);
+            });
+
             stopPerformanceLoop();
             console.log('[NovaCore] Cleanup complete');
         }, null, 'globalCleanup');
@@ -1985,7 +2077,6 @@
             console.log(`[NovaCore] Initializing version ${SCRIPT_VERSION}...`);
 
             loadCustomTheme();
-            loadDebugLog();
             initSessionStats();
 
             const intro = createIntro();
