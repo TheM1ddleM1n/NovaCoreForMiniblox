@@ -1,8 +1,8 @@
-# NovaCore V2.8 Enhanced - Premium Miniblox Userscript 💎
+# NovaCore V2.9 Enhanced - Premium Miniblox Userscript 💎
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-2.8-00ffff?style=for-the-badge)
+![Version](https://img.shields.io/badge/version-2.9-00ffff?style=for-the-badge)
 ![License](https://img.shields.io/badge/license-MIT-00ffff?style=for-the-badge)
 ![Platform](https://img.shields.io/badge/platform-Tampermonkey-00ffff?style=for-the-badge)
 
@@ -16,7 +16,7 @@
 
 ## 🎯 Overview
 
-NovaCore V2.8 is a powerful, modular Tampermonkey userscript that enhances your Miniblox experience with real-time performance monitoring, customizable themes, and quality-of-life improvements. Built on the foundation of NovaCore V1 by @Scripter132132, this enhanced version features significant performance optimizations, memory management improvements, and a sleek modern UI.
+NovaCore V2.9 is a powerful, modular Tampermonkey userscript that enhances your Miniblox experience with real-time performance monitoring, customizable themes, and quality-of-life improvements. Built on the foundation of NovaCore V1 by @Scripter132132, this enhanced version features significant performance optimizations, memory management improvements, and a sleek modern UI.
 
 ### ✨ Key Highlights
 
@@ -132,9 +132,9 @@ NovaCore V2.8 is a powerful, modular Tampermonkey userscript that enhances your 
 ### Script Metadata
 
 ```javascript
-// @name         NovaCore V2.8 Enhanced
+// @name         NovaCore V2.9 Enhanced
 // @namespace    http://github.com/TheM1ddleM1n/
-// @version      2.8
+// @version      2.9
 // @description  NovaCore V2 with improved performance, memory management, and themes!
 // @author       (Cant reveal who im), TheM1ddleM1n
 // @match        https://miniblox.io/
@@ -201,7 +201,16 @@ We welcome contributions! Here's how you can help:
 
 ## 📋 Changelog
 
-### v2.8 (Current)
+### v2.9 (Current)
+
+- No more debug log spam - Removed entire debug system
+- Smarter performance - RAF only runs when actually needed
+- Zero memory leaks - All listeners properly tracked and cleaned up
+- Crash-resistant - Circuit breaker prevents repeated failures
+- Richer analytics - Track averages, not just peaks
+
+### v2.8
+
 - ✨ Added session statistics dashboard
 - 🐛 Improved debug logging system
 - 🎨 Enhanced theme system with custom color picker
@@ -210,6 +219,7 @@ We welcome contributions! Here's how you can help:
 - 📱 Mobile responsiveness improvements
 
 ### v2.0-2.7
+
 - Major performance improvements
 - Theme system implementation
 - Anti-AFK feature
@@ -218,6 +228,7 @@ We welcome contributions! Here's how you can help:
 - Debounced save system
 
 ### v1.0 (Original by @Scripter132132)
+
 - Basic FPS/CPS counters
 - Simple menu system
 - Core functionality
